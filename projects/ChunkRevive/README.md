@@ -7,7 +7,7 @@
 ---
 
 [![Documentation](https://img.shields.io/badge/Docs-RealisticPlantGrowth?style=for-the-badge&logo=gitbook&labelColor=gray&color=c6e2ff)](https://freshchromatic.github.io/docs/)
-[![Github](https://img.shields.io/badge/Github-RealisticPlantGrowth?style=for-the-badge&logo=github&labelColor=gray&color=f5f5f5)](https://freshchromatic.github.io/docs/)
+[![Github](https://img.shields.io/badge/Github-RealisticPlantGrowth?style=for-the-badge&logo=github&labelColor=gray&color=f5f5f5)](https://github.com/FreshChromatic/FreshPlugins)
 [![Discord](https://img.shields.io/discord/1533083452071481374?style=for-the-badge&logo=discord)](https://discord.gg/XwpbGGGRk6)
 </div>
 
