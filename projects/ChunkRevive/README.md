@@ -11,7 +11,7 @@
 [![Discord](https://img.shields.io/discord/1533083452071481374?style=for-the-badge&logo=discord)](https://discord.gg/XwpbGGGRk6)
 </div>
 
-<h2 align="center">
+<h2>
   <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
   &nbsp;About
 </h2>
@@ -22,7 +22,7 @@ Use it to keep resource worlds, exploration zones, and renewable structures fres
 
 ChunkRevive is also commonly used after world updates, making it easy to generate newly introduced terrain without manually locating and deleting region files.
 
-<h2 align="center">
+<h2>
   <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
   &nbsp;Features
 </h2>
@@ -35,7 +35,7 @@ ChunkRevive is also commonly used after world updates, making it easy to generat
 - Let players check nearby tracked-structure protection progress with `/keep`, `/keepchunk`, or `/chunkkeep`.
 - Respect configured world allow/deny rules and optionally integrate with claims managed by third-party land-protection plugins.
 
-<h2 align="center">
+<h2>
   <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
   &nbsp;How It Works
 </h2>
@@ -45,7 +45,7 @@ ChunkRevive is also commonly used after world updates, making it easy to generat
 3. **Revive** selected terrain with safe regeneration, or use the configured reset strategy to delete individual chunks or complete Anvil regions when it is safe to do so.
 4. **Protect** what matters. World allow/deny rules, third-party land-protection plugin integration, structure tracking, confirmation flags, work-tile limits, and heap-aware throttling are applied throughout the workflow.
 
-<h2 align="center">
+<h2>
   <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
   &nbsp;Requirements
 </h2>
@@ -55,7 +55,7 @@ ChunkRevive requires the following:
 - Java Version 21+
 - FreshLib Plugin
 
-<h2 align="center">
+<h2>
   <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
   &nbsp;References
 </h2>
