@@ -1,0 +1,477 @@
+# ChunkRevive Messages File
+# Version: 1.0.0
+
+command:
+    no-permission: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>您沒有執行此指令的權限。
+    player-only: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>此指令只能由玩家執行。
+    reload-success: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>設定檔案與訊息檔案已成功重新載入！
+mark:
+    success: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已標記區塊 <cx_cz>。
+    already: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>區塊 <cx_cz> 已在標記列表中。
+    residence-blocked: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>區塊 <cx_cz>
+        位於 Residence 保護範圍內，無法標記。
+    follow-on: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FBFF8B>已開啟追蹤標記模式，走過的區塊將自動標記。
+    follow-off: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已關閉追蹤標記模式。
+unmark:
+    success: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已撤銷標記區塊 <cx_cz>。
+    not-marked: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>區塊 <cx_cz> 未在標記列表中。
+    follow-on: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FBFF8B>已開啟追蹤撤銷模式，走過已標記的區塊將自動撤銷。
+    follow-off: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已關閉追蹤撤銷模式。
+regen:
+    start: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>開始再生區塊 <cx_cz>...
+    progress: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>再生進度 <cx_cz>：<#FBFF8B><percent>%<#7A7A7A>（<stage>）
+    done: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>區塊 <cx_cz> 再生完成（耗時 <#FBFF8B><elapsed><#8BFF7B>
+        / <elapsed_ms> ms）。
+    failed: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>區塊 <cx_cz> 再生失敗：<reason>
+    batch-start: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>開始批量再生 <count>
+        個標記區塊...
+    batch-done: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>批量再生完成，共再生 <count>
+        個區塊（耗時 <#FBFF8B><elapsed><#8BFF7B> / <elapsed_ms> ms）。
+    none-marked: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>目前沒有標記中的區塊。
+    residence-blocked: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>區塊 <cx_cz>
+        位於 Residence 保護範圍內，跳過再生。
+    confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>即將批量再生約 <#FBFF8B><count><#FFAA00>
+        個區塊，請於 <timeout> 秒內輸入「<#FBFF8B>/cr regen all <scope> --confirm<#FFAA00>」確認執行。
+    world-not-allowed: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>世界 <#FBFF8B><world><#FF6048>
+        已被設定禁止此操作（worlds 名單）。
+deletion:
+    queued: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>已建立工作 <#FBFF8B><job><#0094D5>；目標變冷後會自動執行。
+    bulk-queued: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>已建立 <#FBFF8B><count><#0094D5>
+        個區塊刪除工作；各目標變冷後會依序執行。
+    bulk-confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>即將排程刪除
+        <#FBFF8B><count><#FFAA00> 個已標記區塊，請於 <timeout> 秒內輸入「<#FBFF8B>/cr delete chunk
+        all --confirm<#FFAA00>」確認。
+    bulk-region-queued: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>已建立 <#FBFF8B><count><#0094D5>
+        個完整 region 清理工作。
+    bulk-region-confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>找到
+        <#FBFF8B><count><#FFAA00> 個 1024 格皆已標記的完整 region，請於 <timeout> 秒內輸入「<#FBFF8B>/cr
+        prune region all --confirm<#FFAA00>」確認。
+    empty-region-scan-started: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>正在掃描世界
+        <#FBFF8B><world><#0094D5> 的空白 Anvil region 文件……
+    empty-region-confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>找到
+        <#FBFF8B><count><#FFAA00> 個含有可縮小空白文件的 region，預計回收約 <#FBFF8B><bytes><#FFAA00>。請於
+        <timeout> 秒內輸入「<#FBFF8B>/cr prune empty <world> --confirm<#FFAA00>」確認。
+    empty-region-none: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>世界 <#FBFF8B><world><#7A7A7A>
+        沒有可縮小的空白 Anvil region 文件。
+    empty-region-scan-failed: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>掃描空白
+        Anvil region 失敗：<reason>
+    bulk-empty-region-queued: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>已建立
+        <#FBFF8B><count><#0094D5> 個空白 region 縮小工作；各目標變冷後會依序執行。
+    bulk-empty-region-progress: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>空白
+        region 縮小完成 <#FBFF8B><count><#8BFF7B> 個，實際回收約 <#FBFF8B><bytes><#8BFF7B>。
+    bulk-empty-region-done: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>本輪空白
+        region 縮小工作全部完成：共處理 <#FBFF8B><count><#8BFF7B> 個 region，實際回收約 <#FBFF8B><bytes><#8BFF7B>。
+    no-complete-regions: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>沒有 1024
+        個 chunk 位置皆已標記的完整 region；為避免連帶刪除未標記區域，未建立工作。
+    started: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>工作 <#FBFF8B><job><#0094D5>
+        開始執行。
+    done: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>工作 <#FBFF8B><job><#8BFF7B>
+        完成，回收約 <#FBFF8B><bytes><#8BFF7B>。
+    bulk-progress: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>批量區塊刪除完成 <#FBFF8B><count><#8BFF7B>
+        個區塊，回收約 <#FBFF8B><bytes><#8BFF7B> Anvil 可重用空間（檔案不一定縮小）。
+    bulk-done: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>本輪區塊刪除工作全部完成：共處理
+        <#FBFF8B><count><#8BFF7B> 個區塊，回收約 <#FBFF8B><bytes><#8BFF7B> Anvil 可重用空間（檔案不一定縮小）。
+    failed: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>工作 <#FBFF8B><job><#FF6048>
+        失敗：<reason>
+    cancelled: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已取消 <count> 個等待中的刪除／清理工作。
+    region-confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>即將排程清理世界
+        <#FBFF8B><world><#FFAA00> 的實體 region <#FBFF8B>r.<rx>.<rz><#FFAA00>（最多 1024
+        個區塊）。請於 <timeout> 秒內輸入「<#FBFF8B><command> --confirm<#FFAA00>」確認。
+    protected-region: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>region r.<rx>.<rz>
+        含有 Residence 保護區塊，拒絕清理。
+    no-jobs: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>目前沒有等待或執行中的刪除／清理工作。
+list:
+    title: 標記區塊列表
+    empty: <#7A7A7A>目前沒有標記中的區塊。
+    entry: <#0094D5><cx_cz> <#7A7A7A><world>（<marked_by> · <marked_at>）
+    page-info: 第 <page> / <total> 頁
+    btn-prev: ◀ 上一頁
+    btn-next: 下一頁 ▶
+    btn-unmark: 撤銷
+    btn-regen: 再生
+keepchunk:
+    'on': <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FBFF8B>已開啟區塊撤銷模式，走過已標記的區塊將自動撤銷。
+    'off': <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已關閉區塊撤銷模式。
+display:
+    line1: <#FF6048><bold>待刷新區塊
+    line2: <#7A7A7A><cx_cz>
+    line3: <#FBFF8B>輸入 <white>/keepchunk<#FBFF8B> 撤銷刷新
+    structure-line1: <#FBFF8B><bold><structure_name>
+    structure-line2: <#7A7A7A>將在 <#FBFF8B><days> 天<#7A7A7A>後刷新
+structure:
+    detected: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>偵測到結構 <#FBFF8B><structure_name><#8BFF7B>，已自動標記範圍內
+        <count> 個區塊。
+    check-inside: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>你目前位於結構 <#FBFF8B><structure_name><#0094D5>
+        內（<cx_cz>），範圍 <range>。
+    check-outside: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>你目前不在任何已知結構範圍內。
+    check-refresh: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>下次刷新：<#FBFF8B><days>
+        天 <hours> 小時後<#7A7A7A>（<status>）。
+    refresh-start: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>結構 <#FBFF8B><structure_name><#0094D5>
+        已到期，開始自動刷新（<count> 區塊）...
+    refresh-blocked: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>結構 <#FBFF8B><structure_name><#7A7A7A>
+        已到期，但已進入保護狀態，跳過自動刷新。
+    protection-progress: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>保護進度：<#FBFF8B><percent>%<#7A7A7A>（<remaining>
+        後進入保護狀態）
+    protection-entered: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>結構 <#FBFF8B><structure_name><#8BFF7B>
+        已進入保護狀態，將不再被自動刷新。
+    none-nearby: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>你附近沒有已追蹤的結構。
+    list:
+        title: 結構群組列表
+        empty: <#7A7A7A>目前沒有已追蹤的結構群組。
+        entry: <#0094D5><structure_name><#7A7A7A> <range>（<status>）
+scan:
+    confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>即將掃描世界 <#FBFF8B><world><#FFAA00>（約
+        <region_count> 個 region），請於 <timeout> 秒內輸入「<#FBFF8B><command> --confirm<#FFAA00>」確認執行。
+    confirm-expired: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>確認逾時，操作已取消，請重新輸入指令。
+    world-not-allowed: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>世界 <#FBFF8B><world><#FF6048>
+        已被設定禁止此操作（worlds 名單）。
+    radius-too-large: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>半徑 <#FBFF8B><radius><#FF6048>
+        超過上限 <#FBFF8B><max><#FF6048>，請改用 /cr mark full 或縮小半徑。
+    scan-started: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#0094D5>掃描已開始：世界 <#FBFF8B><world><#0094D5>。
+    scan-already-running: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>已有掃描任務在進行中，請稍候或使用
+        /cr cancel 取消。
+    regen-running: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>批量再生正在進行中，且 scan.allow-concurrent-with-regen
+        為 false，請等待再生完成後再掃描。
+    scan-complete: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>掃描完成：找到 <#FBFF8B><found><#8BFF7B>
+        個區塊，新增標記 <#FBFF8B><marked><#8BFF7B> 個（跳過已標記 <skipped_existing>、跳過領地 <skipped_claimed>、跳過生態域不符
+        <skipped_biome_mismatch>）。
+    unknown-biome: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>無法辨識的生態域 ID：<#FBFF8B><ids><#FF6048>，請確認拼字或命名空間（如
+        minecraft:desert）。
+    biome-confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>即將掃描世界
+        <#FBFF8B><world><#FFAA00> 中符合生態域「<#FBFF8B><biomes><#FFAA00>」的區塊（約 <region_count>
+        個 region），請於 <timeout> 秒內輸入「<#FBFF8B><command> --confirm<#FFAA00>」確認執行。
+    scan-failed: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>掃描失敗：<reason>
+    reset-confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>即將清除世界
+        <#FBFF8B><world><#FFAA00> 的所有標記與結構紀錄（不影響地形），請於 <timeout> 秒內輸入「<#FBFF8B>/cr
+        mark resetmark <world> --confirm<#FFAA00>」確認。
+    reset-complete: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已清除世界 <#FBFF8B><world><#8BFF7B>
+        的 <count> 筆標記與 <group_count> 個結構群組。
+regions:
+    count: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>世界 <#FBFF8B><world><#8BFF7B>
+        共有 <#FBFF8B><count><#8BFF7B> 個 Region 檔案。
+tuning:
+    title: ChunkRevive 自動調校
+    hardware-title: 硬體與執行環境
+    regen-title: 區塊再生調校
+    scan-title: 磁碟掃描調校
+    preview-title: <mode> 模式預覽
+    info-line: <#7A7A7A><label>：<#FBFF8B><value>
+    setting-line: <#7A7A7A><label>：<#0094D5><current> <#7A7A7A>→ <#FBFF8B><recommended>
+    recommended-mode-line: <#7A7A7A>系統建議：<#8BFF7B><mode>
+    label-processors: 邏輯處理器
+    label-heap: JVM Heap
+    label-system-memory: 系統可見記憶體
+    label-jvm-threads: JVM 執行緒
+    label-cpu-load: 系統 CPU 使用率
+    label-environment: 伺服器執行環境
+    hover-processors: |-
+        <#0094D5>邏輯處理器</#0094D5>
+        <#7A7A7A>JVM 可使用的處理器數量；容器 CPU 限制通常也會反映在此。
+        此值是再生與掃描執行緒上限的主要依據。
+    hover-heap: |-
+        <#0094D5>JVM Heap</#0094D5>
+        <#7A7A7A>由 -Xmx 限制的 Java 記憶體。
+        較大的 Heap 可容納更多同時生成的區塊，但不代表應使用全部記憶體。
+    hover-system-memory: |-
+        <#0094D5>系統可見記憶體</#0094D5>
+        <#7A7A7A>JVM 或容器目前可見的實體記憶體。
+        調校以 JVM Heap 為硬限制；系統可用記憶體過低時會建議最佳化模式。
+    hover-jvm-threads: |-
+        <#0094D5>JVM 執行緒</#0094D5>
+        <#7A7A7A>整個伺服器目前存活的 Java 執行緒。
+        它會隨插件與工作量變動，因此不直接寫入數值公式；異常偏高時會建議最佳化模式。
+    hover-cpu-load: |-
+        <#0094D5>系統 CPU 使用率</#0094D5>
+        <#7A7A7A>執行指令當下的系統負載快照。
+        高負載時會建議最佳化模式，但不改變各模式的固定計算結果。
+    hover-environment: |-
+        <#0094D5>伺服器執行環境</#0094D5>
+        <#7A7A7A>Paper 使用主執行緒；Folia 將世界工作分配到 region threads。
+        套用批次過大時，兩者都可能出現 tick 延遲。
+    mode-optimized: 最佳化
+    mode-balanced: 平衡
+    mode-performance: 性能
+    hover-mode-optimized: |-
+        <#8BFF7B>最佳化模式</#8BFF7B>
+        <#7A7A7A>優先維持 TPS 與 Folia region tick 穩定。
+        較低 CPU、磁碟 I/O 與記憶體峰值，但完成時間較長。
+        <#FBFF8B>點擊查看完整配置差異
+    hover-mode-balanced: |-
+        <#FBFF8B>平衡模式</#FBFF8B>
+        <#7A7A7A>在伺服器穩定與處理速度間取得平衡，適合一般正式伺服器。
+        <#FBFF8B>點擊查看完整配置差異
+    hover-mode-performance: |-
+        <#FF6048>性能模式</#FF6048>
+        <#7A7A7A>使用更多 CPU、磁碟 I/O 與記憶體來縮短處理時間。
+        建議只在維護時段使用；記憶體安全限制仍會保持啟用。
+        <#FBFF8B>點擊查看完整配置差異
+    label-generation-threads: 地形產生執行緒
+    label-generation-priority: 地形執行緒優先級
+    label-batch-delay: 批次間隔 ticks
+    label-batch-concurrency: 再生批次併發
+    label-batch-size: 每批區塊上限
+    label-work-tile-size: 空間工作 Tile 上限
+    label-apply-batch-size: 每 tick 套用批次
+    label-memory-safety: 記憶體安全
+    label-active-batches: 記憶體安全活躍批次
+    label-memory-batch-size: 記憶體安全批次上限
+    label-generation-limit: 記憶體安全執行緒上限
+    label-heap-watermark: Heap 高水位
+    label-scan-threads: 掃描執行緒
+    label-scan-priority: 掃描執行緒優先級
+    hover-generation-threads: |-
+        <#0094D5>配置：regen.thread-pool.parallelism</#0094D5>
+        <#7A7A7A>調高可加快地形計算，但會增加 CPU 與短期記憶體使用，並可能影響 tick。
+        調低可減輕處理器壓力，但再生耗時更長。
+        本次依 <processors> 個處理器與 <heap> MiB Heap 建議 <recommended>。
+    hover-generation-priority: |-
+        <#0094D5>配置：regen.thread-pool.priority</#0094D5>
+        <#7A7A7A>調高會讓地形工作更積極競爭 CPU；調低可讓伺服器 tick 與其他插件優先執行。
+        Java 正常優先級為 5。
+    hover-batch-delay: |-
+        <#0094D5>配置：regen.batch-delay-ticks</#0094D5>
+        <#7A7A7A>調高可分散負載並改善 tick 穩定性，但會延長總時間。
+        調低會更快派發工作，也會增加持續 CPU 與 I/O 壓力。
+    hover-batch-concurrency: |-
+        <#0094D5>配置：regen.batch-concurrency</#0094D5>
+        <#7A7A7A>目前每張地形 DAG 已使用共享生成池。多批次同時執行會競爭相同 workers、重複 halo 並降低 CARVERS 快取命中率，因此自動調校固定為 1。
+    hover-batch-size: |-
+        <#0094D5>配置：regen.max-chunks-per-batch</#0094D5>
+        <#7A7A7A>0 代表不切割相鄰生成批次，可保持樹木、樹葉、礦脈等跨區塊裝飾連續。
+        代價是大型連續範圍會占用更多記憶體，且完成前不會提交部分進度。
+    hover-work-tile-size: |-
+        <#0094D5>配置：regen.work-tile-size</#0094D5>
+        <#7A7A7A>限制每張空間生成 DAG 的目標區塊數。依 Heap 調高可減少 tile halo 重複，調低則減少 ProtoChunk 與 CARVERS 快取的記憶體峰值。
+        本次依 <heap> MiB Heap 建議 <recommended>。
+    hover-apply-batch-size: |-
+        <#0094D5>配置：regen.apply-batch-size</#0094D5>
+        <#7A7A7A>控制每 tick 可套用的區塊數。調高可更快完成載入、光照與鄰居更新，但更容易造成 tick 尖峰。
+    hover-memory-safety: |-
+        <#0094D5>配置：regen.memory-safety.enabled</#0094D5>
+        <#7A7A7A>啟用 Heap 水位、批次數、批次大小與產生執行緒硬限制。所有自動模式都會保持啟用，以降低 OOM 與伺服器崩潰風險。
+    hover-active-batches: |-
+        <#0094D5>配置：regen.memory-safety.max-active-batches</#0094D5>
+        <#7A7A7A>AUTO 使用 Heap 自動上限；CONFIG／IGNORE 不增加第二層上限，直接依 regen.batch-concurrency；正整數則是固定硬上限。
+    hover-memory-batch-size: |-
+        <#0094D5>配置：regen.memory-safety.max-chunks-per-batch</#0094D5>
+        <#7A7A7A>AUTO 依 Heap 切割；CONFIG／IGNORE 按照 regen.max-chunks-per-batch。
+        調校模式使用 CONFIG，讓上層的 0 保持無限制，避免跨區塊裝飾斷層。
+    hover-generation-limit: |-
+        <#0094D5>配置：regen.memory-safety.max-generation-threads</#0094D5>
+        <#7A7A7A>AUTO 使用 Heap／CPU 自動上限；CONFIG／IGNORE 直接依 regen.thread-pool.parallelism；正整數則是固定硬上限。
+    hover-heap-watermark: |-
+        <#0094D5>配置：regen.memory-safety.heap-high-watermark-percent</#0094D5>
+        <#7A7A7A>Heap 使用量到達此比例時暫停派發新批次。調高可提高吞吐量，但更接近 OOM；調低則更保守。
+    hover-scan-threads: |-
+        <#0094D5>配置：scan.thread-pool.parallelism</#0094D5>
+        <#7A7A7A>並行讀取 region 檔案的工作數。調高可加快掃描，但會增加 CPU 與磁碟隨機讀取；HDD 或共享儲存可能因此變慢。
+    hover-scan-priority: |-
+        <#0094D5>配置：scan.thread-pool.priority</#0094D5>
+        <#7A7A7A>調高讓掃描更積極競爭 CPU；調低可減少它對伺服器 tick、再生及其他插件的影響。
+    button-back: 返回
+    button-refresh: 重新檢測
+    button-apply: 套用 <mode>
+    hover-back: 返回硬體偵測與模式選擇
+    hover-refresh: 重新擷取當前 CPU、記憶體與 JVM 狀態
+    hover-apply: 預備寫入 config.yml；下一步仍需二次確認
+    button-confirm: 確認套用
+    hover-confirm: 寫入 config.yml 並立即套用再生與掃描設定
+    button-cancel: 取消
+    hover-cancel: 返回調校預覽，不修改設定
+    confirm-required: <#FFAA00>即將套用 <mode> 模式。設定會備份至 config.yml.bak，請於 <timeout> 秒內確認。
+    confirm-expired: <#FF6048>調校確認不存在或已逾時，請重新預覽並套用。
+    busy: <#FF6048>目前有區塊再生或磁碟掃描工作正在執行，請等待工作完成後再套用調校。
+    applied: <#8BFF7B>已套用 <mode> 模式並寫入 config.yml；再生與掃描設定已立即生效。
+    save-failed: <#FF6048>無法備份或儲存 config.yml，未套用調校。請查看伺服器紀錄。
+    unknown-profile: <#FF6048>未知模式：<profile>。可用模式為 optimized、balanced、performance。
+    value-unavailable: 不支援
+    value-paper: Paper
+    value-folia: Folia
+    value-mib: <used> / <max> MiB
+    value-percent: <value>%
+    value-system-memory: <free> MiB 可用 / <total> MiB
+descriptions:
+    help: 顯示指令幫助訊息
+    mark-help: 標記相關指令幫助
+    mark-mark: 標記玩家目前所在的區塊
+    mark-coords: 標記指定世界及座標的區塊
+    mark-follow: 切換移動時自動標記區塊的模式
+    mark-list: 列出所有已手動標記的區塊
+    mark-resetmark: 重設並清除指定世界的所有區塊標記
+    mark-resetmark-confirm: 確認清除指定世界的所有區塊標記
+    mark-fullmark: 掃描指定世界的所有過期區塊並加入標記
+    mark-fullmark-confirm: 確認掃描指定世界的所有過期區塊並加入標記
+    mark-radius: 標記指定方塊半徑範圍內的過期區塊
+    mark-biomefull: 掃描指定世界中符合生態域的所有過期區塊並加入標記
+    mark-biomefull-confirm: 確認掃描指定世界中符合生態域的所有過期區塊並加入標記
+    mark-biomeradius: 標記指定方塊半徑範圍內符合生態域的過期區塊
+    mark-here-biome: 自動偵測並標記玩家目前所在的整塊生態域範圍（已存在的過期區塊）
+    unmark-help: 取消標記相關指令幫助
+    unmark-here: 取消標記目前所在的區塊
+    unmark-chunk: 取消標記指定座標的區塊
+    unmark-follow: 切換移動時自動撤銷標記的模式
+    regen-help: 區塊再生相關指令幫助
+    regen-here: 強制再生目前所在的區塊
+    regen-chunk: 強制再生指定世界及座標的區塊
+    regen-struct: 強制再生目前區塊所屬的完整結構
+    regen-here-struct-confirm: 確認強制再生目前區塊所屬的完整結構
+    regen-here-biome: 自動偵測、標記並重生玩家目前所在的整塊生態域範圍
+    regen-here-biome-confirm: 確認自動偵測、標記並重生玩家目前所在的整塊生態域範圍
+    regen-all-chunks: 批量再生所有被手動標記的獨立區塊
+    regen-all-structures: 批量再生所有已被標記的結構
+    regen-all-all: 批量再生全部已標記的區塊與結構
+    regen-all-chunks-confirm: 確認批量再生所有被手動標記的獨立區塊
+    regen-all-structures-confirm: 確認批量再生所有已被標記的結構
+    regen-all-all-confirm: 確認批量再生全部已標記的區塊與結構
+    reset-here: 依照 reset-strategy 重置目前所在的區塊
+    reset-here-confirm: 確認依照 reset-strategy 重置目前所在的區塊
+    reset-chunk: 依照 reset-strategy 重置指定世界及座標的區塊
+    reset-chunk-confirm: 確認依照 reset-strategy 重置指定世界及座標的區塊
+    reset-all-chunks: 依照 reset-strategy 重置所有手動標記的獨立區塊
+    reset-all-structures: 依照 reset-strategy 重置所有已標記的結構
+    reset-all-all: 依照 reset-strategy 重置全部已標記的區塊與結構
+    reset-all-chunks-confirm: 確認依照 reset-strategy 重置所有手動標記的獨立區塊
+    reset-all-structures-confirm: 確認依照 reset-strategy 重置所有已標記的結構
+    reset-all-all-confirm: 確認依照 reset-strategy 重置全部已標記的區塊與結構
+    delete-chunk-here: 等待卸載後刪除目前區塊的 terrain、entities 與 POI
+    delete-chunk-coords: 等待卸載後刪除指定區塊的 terrain、entities 與 POI
+    delete-chunk-all: 等待卸載後刪除所有已標記區塊的 terrain、entities 與 POI
+    delete-here-chunk: 等待卸載後刪除目前所在的單一區塊
+    delete-here-struct: 確認後刪除目前所在的已標記結構範圍
+    delete-here-biome: 偵測並確認後刪除目前連續生態域的完整區塊
+    delete-marked: 確認後刪除所有世界中的 ChunkRevive 已標記區塊
+    delete-marked-world: 確認後刪除指定世界中的 ChunkRevive 已標記區塊
+    prune-region-here: 確認後在線清空並縮小目前所在的 32x32 Anvil region
+    prune-region-coords: 確認後在線清空並縮小指定的 32x32 Anvil region
+    prune-region-chunk: 以區塊座標選擇並清理其所屬的 32x32 Anvil region
+    prune-region-all: 清理所有 1024 個位置皆已標記的完整 Anvil regions
+    prune-empty: 掃描並在線縮小指定世界中索引已完全空白的 Anvil region 文件
+    status: 分頁查看批量再生、世界掃描與刪除工作進度
+    server: 查看伺服器硬體規格、執行緒與資料庫狀態
+    cancel: 中止目前正在進行的批量再生或掃描任務
+    reload: 重新載入設定檔與語言檔案
+    regions: 查看指定世界的 Regions 數量
+    tune: 依伺服器處理器與記憶體產生再生及掃描調校建議
+    struct-check: 檢查玩家目前區塊結構的保護狀態
+    struct-list: 列出所有已被偵測到的結構群組
+    struct-regen: 手動強制再生指定的結構群組
+    struct-unblock: 解除指定結構群組的保護鎖定
+    struct-block: 手動鎖定並保護指定的結構群組
+    struct-reset: 重設指定結構群組的保護狀態與計時器
+    struct-resetall: 批量重設所有結構的狀態與計時器
+    struct-resetall-confirm: 確認批量重設所有結構的狀態與計時器
+text:
+    world-not-found: 找不到世界：%s
+    console-world-required: 主控台必須指定世界名稱。
+    regen-cancel-requested: 已發送取消批量再生任務的請求。
+    scan-cancel-requested: 已發送取消掃描任務的請求。
+    no-cancellable-work: 目前沒有正在運行的批量再生、掃描或等待刪除任務。
+    list-unmark-hover: 撤銷標記此區塊
+    list-regen-hover: 再生此區塊
+    duration-seconds: '%s秒'
+    duration-minutes: '%s分鐘'
+    duration-hours: '%s小時'
+    relative-seconds: '%s秒前'
+    relative-minutes: '%s分鐘前'
+    relative-hours: '%s小時前'
+    relative-days: '%s天前'
+    scan-already-running-world: 掃描已在進行中：%s
+    here-biome-requires-player: 使用 here 需以玩家身分執行，且必須站在 %s 內；否則請直接輸入明確的生態域 ID。
+    biome-no-markable-chunks: 生態域 %s 沒有可標記的區塊（可能因為領地排除，或起點本身尚未生成）。
+    biome-marked: 已標記目前生態域（%s）內 %s 個新區塊（偵測到 %s 個%s）。
+    biome-mark-truncated: ，已達安全上限 %s 個區塊而提前停止
+    player-only: 此指令只能由玩家執行。
+    biome-undetermined: 無法判定目前所在的生態域。
+    regen-busy: 批量再生已在進行中。
+    biome-no-regenerable-chunks: 附近沒有符合生態域 %s、且已存在的區塊可重生。
+    biome-regen-confirm: 即將重生生態域 %s 約 %s 個區塊%s，請於 %s 秒內輸入「/cr regen here biome --confirm」確認執行。
+    biome-regen-truncated: （已達安全上限 %s 個區塊而提前停止）
+    biome-regen-start: 偵測到生態域 %s，共 %s 個區塊，開始重生...
+    biome-no-deletable-chunks: 目前連續生態域沒有可刪除的已生成區塊。
+    biome-delete-confirm: 即將刪除目前連續生態域 %s 的 %s 個完整區塊%s；這不是只刪除生態域資料。請於 %s 秒內輸入「/cr delete
+        here biome --confirm」確認。
+    biome-delete-truncated: （偵測已達安全上限）
+    structure-protected: 已受保護
+    structure-scheduled: 排程中
+    structure-refresh-in-days: '%s 天後刷新'
+    structure-not-found: 找不到此結構群組。
+    structure-claim-blocked: 範圍內含 Residence 領地，已中止強制刷新。
+    structure-unblocked: 已解除該結構的保護狀態。
+    structure-blocked: 已將該結構設為保護狀態。
+    structure-reset: 已重設該結構的狀態與刷新計時器。
+    structure-reset-all: 已重設所有結構群組的狀態與刷新計時器（共 %s 個）。
+    structure-reset-all-confirm: 即將重設所有結構的保護狀態與刷新計時器，請輸入「/cr struct resetall --confirm」確認。
+    structure-id-invalid: 無效的結構群組 ID。
+    deletion-nearby-player: 附近仍有玩家
+    deletion-chunk-holder: 仍有 ChunkHolder %s,%s
+    deletion-cold-check: 冷區域確認 1/2
+    deletion-started: 開始處理
+    deletion-completed: 處理完成
+    deletion-restart-cold-check: 重啟後重新確認冷區域
+    deletion-restored-waiting: 由資料庫恢復，等待檢查
+    deletion-not-checked: 尚未檢查
+    deletion-log: '[重置日誌] %s %s：工作 %s，世界 %s，%s%s。'
+    deletion-released: ，釋放約 %s
+    regen-duration-minutes-seconds: '%s分%s秒'
+    regen-duration-seconds: '%.1f秒'
+    reset-not-structure: 目前所在區塊不屬於任何已標記的結構，請改用 /cr regen。
+    reset-no-deletable: 目前沒有可刪除的已標記區塊。
+    reset-no-deletable-world: 世界 %s 沒有可刪除的已標記區塊。
+    reset-delete-marked-confirm: 即將排程刪除 %s 個 ChunkRevive 已標記區塊（不是世界中的所有區塊）。請於 %s 秒內輸入「%s」確認。
+    reset-structure-empty: 此結構已沒有已標記區塊。
+    reset-structure-claim-blocked: 此結構範圍內含有 Residence 保護區塊，拒絕刪除整個結構。
+    reset-structure-confirm: 即將刪除已標記結構 %s 的 %s 個區塊。請於 %s 秒內輸入「/cr delete here struct
+        --confirm」確認。
+    regen-structure-confirm: 即將重新生成已標記結構的 %s 個區塊。請於 %s 秒內輸入「/cr regen here struct --confirm」確認。
+    reset-single-confirm: 重置策略將對 %s %s,%s 執行 %s。請於 %s 秒內輸入「%s」確認。
+    reset-busy: 批量再生已在進行中，未建立任何重置工作。
+    reset-plan: 重置策略：刪除 %s 個完整 Region、刪除 %s 個區塊、重置 %s 個區塊。
+    reset-regen-busy: 批量再生已在進行中，未建立新的再生工作。
+    reset-plan-confirm: 重置計畫：刪除 %s 個完整 Region、刪除 %s 個區塊、重新生成 %s 個區塊。請於 %s 秒內輸入「%s」確認。
+    reset-plan-confirm-target: 重置目標：%s。計畫：刪除 %s 個完整 Region、刪除 %s 個區塊、重新生成 %s 個區塊。請於 %s 秒內輸入「%s」確認。
+    reset-target-biome: 生態域 %s
+    reset-target-structure: 結構 %s
+    status-regen-title: 批量再生狀態
+    status-deletion-title: 刪除／Region 清理工作
+    status-scan-title: 掃描佇列狀態
+    status-server-title: 伺服器運行狀態
+    status-label: '%s：'
+    status-idle: 閒置中 (Idle)
+    status-running: 執行中 (Running)
+    status-cancelling: 取消中 (Cancelling)
+    status-waiting-cold: 等待變冷
+    status-failed: 失敗
+    status-restored: '  重啟恢復'
+    status-previous: 上一頁
+    status-next: 下一頁
+    status-page-info: 顯示第 %s–%s 個工作，共 %s 個。
+    status-cancel-regen: 取消批量再生
+    status-cancel-regen-hover: 取消當前運行的批量再生任務
+    status-cancel-scan: 取消掃描
+    status-cancel-scan-hover: 取消當前運行的掃描任務
+    status-uptime: '%s天 %s小時 %s分鐘 %s秒'
+    status-unavailable: 不支援 (N/A)
+    status-current: 當前狀態
+    status-completed: 已完成
+    status-concurrency: 當前併發
+    status-pending: 待處理
+    status-scan-world: 掃描世界
+    status-region-progress: Region 進度
+    status-processors: 邏輯處理器 (Logical Processors)
+    status-jvm-threads: JVM 執行緒總數 (Total JVM Threads)
+    status-group-threads: 當前群組執行緒數 (Group Threads)
+    status-gen-threads: 作用中地形產生執行緒 (Active Gen Threads)
+    status-memory: 記憶體使用量
+    status-cpu: 系統 CPU 使用率 (CPU Usage)
+    status-uptime-label: JVM 運行時間 (Uptime)
+    status-players: 線上玩家人數 (Players)
+    status-database: 資料庫類型 (Database Type)
+    status-marked-chunks: 已標記區塊數量 (Marked Chunks)
+    status-marked-structures: 已標記結構數量 (Marked Structures)
+    status-residence-blocked: 遭領地阻止再生區塊 (Residence Blocked Chunks)
+    status-version: 伺服器版本 (Version)
+    status-os: 作業系統
+    status-gen-thread-value: '%s / %s (配置: %s)'
+    status-memory-value: '%s MB / %s MB (最大 %s MB)'
+    status-marked-chunks-value: '%s (獨立標記: %s, 結構標記: %s)'
+    status-marked-structures-value: '%s (手動保護/被阻止: %s)'

@@ -1,0 +1,31 @@
+name: ChunkRevive
+version: '1.0.0'
+main: github.freshchromatic.chunkrevive.bootstrap.ChunkRevivePlugin
+api-version: '1.21'
+authors:
+  - FreshChromatic
+folia-supported: true
+description: Chunk regeneration management system
+
+dependencies:
+  server:
+    FreshLib:
+      load: BEFORE
+      required: true
+      join-classpath: true
+    packetevents:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Residence:
+      load: BEFORE
+      required: false
+      join-classpath: true
+
+permissions:
+  chunkrevive.admin:
+    description: Access to all /cr admin commands
+    default: op
+  chunkrevive.keep:
+    description: Access to /keepchunk chunk protection mode
+    default: true
