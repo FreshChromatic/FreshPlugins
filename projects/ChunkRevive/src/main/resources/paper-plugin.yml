@@ -1,5 +1,5 @@
 name: ChunkRevive
-version: '1.0.0'
+version: '26-Release.1'
 main: github.freshchromatic.chunkrevive.bootstrap.ChunkRevivePlugin
 api-version: '1.21'
 authors:

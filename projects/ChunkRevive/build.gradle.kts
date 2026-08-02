@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "github.freshchromatic"
-version = "1.0.0"
+version = "26-Release.1"
 
 repositories {
     mavenCentral()
