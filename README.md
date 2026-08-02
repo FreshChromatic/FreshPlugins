@@ -1,6 +1,13 @@
 # FreshPlugins
 FreshChromatic Projects
 
+<div align="center">
+  
+[![Modrinth](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/compact/available/modrinth_vector.svg)](https://modrinth.com/organization/freshchromatic)
+[![Documentation](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/compact/documentation/ghpages_vector.svg)](https://freshchromatic.github.io/docs/)
+
+</div>
+
 ### Plugins:
 - ChunkRevive
 
