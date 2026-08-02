@@ -16,6 +16,7 @@ public final class ChunkRevivePlugin extends JavaPlugin {
             Bukkit.getPluginManager().disablePlugin(this);
             return;
         }
+        BStatsMetrics.start(this);
         Logging.logger().info("ChunkRevive enabled.");
     }
 

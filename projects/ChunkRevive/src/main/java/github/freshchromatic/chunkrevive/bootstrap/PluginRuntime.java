@@ -20,6 +20,7 @@ import github.freshchromatic.freshlib.database.Database;
 import github.freshchromatic.freshlib.util.Logging;
 import github.freshchromatic.chunkrevive.api.ChunkReviveApi;
 import github.freshchromatic.chunkrevive.application.api.DefaultChunkReviveApi;
+import github.freshchromatic.chunkrevive.infrastructure.update.ModrinthUpdateChecker;
 import org.bukkit.Bukkit;
 
 import java.io.IOException;
@@ -45,6 +46,7 @@ final class PluginRuntime {
     private final DiskChunkScanner diskChunkScanner;
     private final DeletionService deletionService;
     private final DefaultChunkReviveApi publicApi;
+    private final ModrinthUpdateChecker updateChecker;
 
     PluginRuntime(
             ChunkRevivePlugin plugin,
@@ -63,7 +65,8 @@ final class PluginRuntime {
             WorldAccessPolicy worldAccessPolicy,
             DiskChunkScanner diskChunkScanner,
             DeletionService deletionService,
-            DefaultChunkReviveApi publicApi) {
+            DefaultChunkReviveApi publicApi,
+            ModrinthUpdateChecker updateChecker) {
         this.plugin = plugin;
         this.configManager = configManager;
         this.messagesManager = messagesManager;
@@ -81,6 +84,7 @@ final class PluginRuntime {
         this.diskChunkScanner = diskChunkScanner;
         this.deletionService = deletionService;
         this.publicApi = publicApi;
+        this.updateChecker = updateChecker;
     }
 
     PluginConfig config() {
@@ -142,6 +146,7 @@ final class PluginRuntime {
         chunkReviveCommand.setMessages(messages);
         keepCommands.setMessages(messages);
         keepCommands.setConfig(config);
+        updateChecker.start(config.updates);
     }
 
     void stop() {
@@ -154,6 +159,7 @@ final class PluginRuntime {
         structureProtectionTracker.stop();
         structureRefreshScheduler.stop();
         displayService.stop();
+        updateChecker.stop();
         database.close();
         NmsTerrainGenerator.shutdownPool();
     }

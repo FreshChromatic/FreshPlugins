@@ -37,6 +37,7 @@ import github.freshchromatic.chunkrevive.api.ChunkReviveApi;
 import github.freshchromatic.chunkrevive.application.api.DefaultChunkReviveApi;
 import github.freshchromatic.chunkrevive.application.api.DefaultIntegrationApi;
 import github.freshchromatic.chunkrevive.integration.residence.ResidenceIntegration;
+import github.freshchromatic.chunkrevive.infrastructure.update.ModrinthUpdateChecker;
 
 /** Builds and starts the complete runtime component graph. */
 final class ChunkReviveBootstrap {
@@ -130,6 +131,10 @@ final class ChunkReviveBootstrap {
             plugin, config, messages, structureRegistry, markRegistry, worldAccessPolicy);
         refreshScheduler.start();
 
+        var updateChecker = new ModrinthUpdateChecker(plugin, messagesManager::config);
+        Bukkit.getPluginManager().registerEvents(updateChecker, plugin);
+        updateChecker.start(config.updates);
+
         ListenerRegistrar.register(
             plugin, markService, structureService, displayService,
             messagesManager::config, configManager::config, protectionIntegration);
@@ -147,7 +152,7 @@ final class ChunkReviveBootstrap {
             plugin, configManager, messagesManager, database, markRegistry, displayService,
             structureRegistry, structureDetector, structureMarkExpander, refreshScheduler,
             structureProtectionTracker, chunkReviveCommand, keepCommands,
-            worldAccessPolicy, diskChunkScanner, deletionService, publicApi);
+            worldAccessPolicy, diskChunkScanner, deletionService, publicApi, updateChecker);
     }
 
     private static ConfigurateConfigManager<PluginConfig> configManager(ChunkRevivePlugin plugin) {

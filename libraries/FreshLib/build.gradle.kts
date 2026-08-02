@@ -50,6 +50,9 @@ dependencies {
     compileOnly("dev.lone:api-itemsadder:4.0.10")
     compileOnly("com.arcaniax:HeadDatabase-API:1.3.2")
 
+    // Anonymous, opt-out plugin metrics. Shaded below to avoid conflicts with other plugins.
+    implementation("org.bstats:bstats-bukkit:3.2.1")
+
     // testing
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.0.3")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:6.0.3")
@@ -97,6 +100,7 @@ tasks {
 
     shadowJar {
         archiveClassifier.set("")
+        relocate("org.bstats", "github.freshchromatic.freshlib.libs.bstats")
         // Not relocated: cloud-paper/guice/configurate-yaml are part of FreshLib's public
         // surface (declared as `api`) — consuming plugins reference these packages directly
         // (e.g. AssistiveFeatures' AFCommands uses org.incendo.cloud.CommandManager without

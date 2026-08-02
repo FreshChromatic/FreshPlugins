@@ -29,6 +29,7 @@ public final class Messages implements Config {
     public Regions regions = new Regions();
     public Tuning tuning = new Tuning();
     public Descriptions descriptions = new Descriptions();
+    public Update update = new Update();
     /**
      * Short plain-text fragments used by command UIs and internal status output.
      * They deliberately live alongside component messages so every player-visible
@@ -38,6 +39,14 @@ public final class Messages implements Config {
 
     public String text(String key, Object... arguments) {
         return text.getOrDefault(key, key).formatted(arguments);
+    }
+
+    @ConfigSerializable
+    public static class Update {
+        @Setting("available")
+        public ComponentMessage available = new ComponentMessage(
+            "<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FBFF8B>A new version is available: <#8BFF7B><latest_version> "
+                + "<#7A7A7A>(current: <current_version>) <#0094D5><url>");
     }
 
     private static Map<String, String> defaultText() {

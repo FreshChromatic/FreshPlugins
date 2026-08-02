@@ -28,10 +28,17 @@ public final class PluginConfig implements Config {
     public Scan scan = new Scan();
     public Biome biome = new Biome();
     public Safety safety = new Safety();
+    public Updates updates = new Updates();
 
     @Setting("enable-debug-logs")
     @Comment("Whether to show detailed structure, terrain generation, and deletion diagnostic logs")
     public boolean enableDebugLogs = false;
+
+    @ConfigSerializable
+    public static class Updates {
+        @Comment("Check Modrinth for a newer compatible ChunkRevive release. No files are downloaded automatically.")
+        public boolean enabled = false;
+    }
 
     @ConfigSerializable
     public static class ResetStrategy {

@@ -41,6 +41,12 @@ dependencies {
     // Residence soft-dependency
     compileOnly(files("libs/Residence6.0.1.6.jar"))
 
+    // Anonymous, opt-out plugin metrics. Shaded below to avoid conflicts with other plugins.
+    implementation("org.bstats:bstats-bukkit:3.2.1")
+
+    // Modrinth update-check API response parsing. Shaded below to avoid relying on a server-provided Gson.
+    implementation("com.google.code.gson:gson:2.13.2")
+
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.0.3")
     testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testImplementation(project(":libraries:FreshLib"))
@@ -143,7 +149,9 @@ tasks {
         }
         mergeServiceFiles()
         val libBase = "github.freshchromatic.chunkrevive.libs"
+        relocate("org.bstats", "$libBase.bstats")
         relocate("io.github.tofaa2.entitylib", "$libBase.entitylib")
+        relocate("com.google.gson", "$libBase.gson")
         archiveClassifier.set("")
     }
 
