@@ -68,6 +68,8 @@ paper {
     foliaSupported = true
     version = findProperty("freshlibVersion") as String
     description = "Library for all FreshChromatic projects"
+    authors = listOf("FreshChromatic", "tcib_cat")
+    website = "https://modrinth.com/plugin/freshlib"
     apiVersion = "1.21"
     serverDependencies {
         // joinClasspath is required even though these are compileOnly at build time — compileOnly

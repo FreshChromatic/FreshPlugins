@@ -4,8 +4,10 @@ main: github.freshchromatic.chunkrevive.bootstrap.ChunkRevivePlugin
 api-version: '1.21'
 authors:
   - FreshChromatic
+  - tcib_cat
+website: https://modrinth.com/plugin/chunkrevive
 folia-supported: true
-description: Chunk regeneration management system
+description: Make the chunk to its original state.
 
 dependencies:
   server:
