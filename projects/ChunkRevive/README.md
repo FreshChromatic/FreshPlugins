@@ -62,7 +62,10 @@ ChunkRevive requires the following:
 
 - [Dominion](https://github.com/LunaDeerMC/Dominion) - Text User Interface (TUI)
 
-## Afterword
+<h2>
+  <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
+  &nbsp;Afterword
+</h2>
 
 This project was fully led and edited by tcib_cat, who was responsible for its overall planning and direction. From the initial concept, feature design, and code implementation to testing, maintenance, and documentation, every major stage of the project was developed and supervised by tcib_cat.
 
