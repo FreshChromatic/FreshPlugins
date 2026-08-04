@@ -75,6 +75,8 @@ The completion and continued improvement of this project would not have been pos
 
 Although this project is provided free of charge, its source code and development work may not be claimed, reused, or redistributed without proper acknowledgement. Anyone who uses, references, or modifies the project’s code must comply with the applicable license terms and clearly credit the original author and project.
 
+The use of this project primarily for profit is discouraged. These plugins are made available to servers free of charge, and their development does not provide the original developers with any substantial financial return. Repackaging, reselling, or commercially exploiting work that was freely shared by the original developers may negatively affect motivation to continue maintaining and releasing open-source projects. We therefore ask users and developers to respect the non-commercial spirit in which this project is provided.
+
 Original copyright notices, author information, and attribution must not be removed, hidden, or altered. The project, or any modified version of it, must not be renamed, repackaged, or presented as an independently developed work through minor code changes, additional features, or other forms of redistribution.
 
 Developers who create derivative works based on this project should clearly identify the original project and author, while also describing the changes or additions they have made. Respecting the work of the original developer is not only a basic form of acknowledgement, but also an essential part of maintaining a healthy and sustainable open-source community.
@@ -85,8 +87,7 @@ Finally, we would once again like to thank everyone who has supported and follow
 
 <div align="right">
 
-**Lead Editor and Developer: tcib_cat**
-<br>
+**Lead Editor and Developer: tcib_cat** <br>
 **Development Team: FreshChromatic**
 
 </div>
