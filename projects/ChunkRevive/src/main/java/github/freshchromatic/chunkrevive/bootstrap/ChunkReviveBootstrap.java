@@ -85,7 +85,7 @@ final class ChunkReviveBootstrap {
         var structureMarkExpander = new StructureMarkExpander(
             config, structureDetector, structureRegistry, landProtection);
 
-        var regenerationService = new RegenerationService(messages, landProtection);
+        var regenerationService = new RegenerationService(plugin, messages, landProtection);
         var markRegistry = new MarkRegistry(
             repository, regenerationService, config, messages, landProtection);
         markRegistry.setStructureMarkExpander(structureMarkExpander);

@@ -9,6 +9,7 @@ import github.freshchromatic.freshlib.util.Logging;
 import net.kyori.adventure.audience.Audience;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.plugin.Plugin;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
 
@@ -16,10 +17,12 @@ public final class RegenerationService {
 
     private Messages messages;
     private final LandProtection landProtection;
+    private final EndPodiumRestorer endPodiumRestorer;
 
-    public RegenerationService(Messages messages, LandProtection landProtection) {
+    public RegenerationService(Plugin plugin, Messages messages, LandProtection landProtection) {
         this.messages = messages;
         this.landProtection = landProtection;
+        this.endPodiumRestorer = new EndPodiumRestorer(plugin);
     }
 
     public void setMessages(Messages messages) {
@@ -131,6 +134,7 @@ public final class RegenerationService {
                     Components.placeholder("cx_cz", chunks.size() == 1 ? first.coordDisplay() : "Group"),
                     Components.placeholder("reason", cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName())));
             } else {
+                endPodiumRestorer.restoreIfAffected(world, chunks);
                 if (!silent) {
                     long elapsedMs = System.currentTimeMillis() - startTime;
                     if (chunks.size() == 1) {
