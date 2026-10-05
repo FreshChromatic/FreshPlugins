@@ -22,6 +22,9 @@ public enum ChunkStage {
 
     public static ChunkStage configured(String raw) {
         if (raw == null) return FULL;
+        if (raw.trim().equalsIgnoreCase("terrain")) {
+            return CARVERS;
+        }
         try {
             return valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ignored) {
@@ -38,7 +41,7 @@ public enum ChunkStage {
             case "heightmaps", "spawn" -> SPAWN;
             case "light" -> LIGHT;
             case "features" -> FEATURES;
-            case "carvers", "liquid_carvers" -> CARVERS;
+            case "terrain", "carvers", "liquid_carvers" -> CARVERS;
             case "surface" -> SURFACE;
             case "noise" -> NOISE;
             case "biomes" -> BIOMES;

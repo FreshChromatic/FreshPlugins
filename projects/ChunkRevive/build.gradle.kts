@@ -25,6 +25,7 @@ dependencies {
     runtimeOnly(project(":projects:ChunkRevive:nms:v1_21_11"))
     runtimeOnly(project(":projects:ChunkRevive:nms:v26_1_2"))
     runtimeOnly(project(":projects:ChunkRevive:nms:v26_2"))
+    runtimeOnly(project(":projects:ChunkRevive:nms:v26_3"))
 
     compileOnly(project(":libraries:FreshLib"))
 
@@ -130,6 +131,7 @@ tasks {
         dependsOn(verifyIntegrationBoundary)
         dependsOn(":projects:ChunkRevive:nms:v26_1_2:check")
         dependsOn(":projects:ChunkRevive:nms:v26_2:check")
+        dependsOn(":projects:ChunkRevive:nms:v26_3:check")
     }
 
     test {
@@ -140,7 +142,8 @@ tasks {
         val nmsAdapters = listOf(
             project(":projects:ChunkRevive:nms:v1_21_11"),
             project(":projects:ChunkRevive:nms:v26_1_2"),
-            project(":projects:ChunkRevive:nms:v26_2")
+            project(":projects:ChunkRevive:nms:v26_2"),
+            project(":projects:ChunkRevive:nms:v26_3")
         )
         nmsAdapters.forEach { adapter ->
             val adapterJar = adapter.tasks.named<Jar>("jar")

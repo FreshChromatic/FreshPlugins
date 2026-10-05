@@ -51,8 +51,8 @@ ChunkRevive is also commonly used after world updates, making it easy to generat
 </h2>
 
 ChunkRevive requires the following:
-- 1.21.11+ (Paper、Folia)
-- Java Version 21+
+- Minecraft 1.21.11, 26.1.2, 26.2, or 26.3 (Paper、Folia)
+- Java 21 for Minecraft 1.21.11; Java 25 for Minecraft 26.x
 - FreshLib Plugin
 
 <h2>

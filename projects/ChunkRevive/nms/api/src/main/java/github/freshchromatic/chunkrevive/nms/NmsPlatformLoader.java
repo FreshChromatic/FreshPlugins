@@ -26,6 +26,8 @@ public final class NmsPlatformLoader {
                 "github.freshchromatic.chunkrevive.nms.v26_1_2.V26_1_2NmsPlatformProvider", 25);
             case "26.2" -> new AdapterDescriptor(
                 "github.freshchromatic.chunkrevive.nms.v26_2.V26_2NmsPlatformProvider", 25);
+            case "26.3" -> new AdapterDescriptor(
+                "github.freshchromatic.chunkrevive.nms.v26_3.V26_3NmsPlatformProvider", 25);
             default -> throw new IllegalStateException(
                 "ChunkRevive does not support Minecraft " + minecraftVersion);
         };

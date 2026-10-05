@@ -12,6 +12,10 @@ group = "org.freshchromatic"
 version = findProperty("freshlibVersion") as String
 description = "Library for all FreshChromatic projects"
 
+val paperVersion = providers.gradleProperty("freshlibPaperVersion")
+    .getOrElse("1.21.11-R0.1-SNAPSHOT")
+val paperJavaVersion = if (paperVersion.startsWith("26.")) 25 else 21
+
 repositories {
     maven("https://repo.nexomc.com/releases") // Nexo
     maven("https://maven.devs.beer/") // ItemsAdder
@@ -19,20 +23,20 @@ repositories {
 }
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(paperJavaVersion))
 }
 
 dependencies {
-    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle(paperVersion)
+    compileOnly("io.papermc.paper:paper-api:$paperVersion")
     // The Paper 1.21.11 dev bundle omits this dependency's version. Keep it
     // aligned with the Adventure version required by paper-api.
     compileOnly("net.kyori:adventure-text-serializer-ansi:4.26.1")
     compileOnly("io.netty:netty-all:4.1.107.Final")
 
     // Cloud command framework
-    api("org.incendo:cloud-paper:2.0.0-beta.17")
-    api("org.incendo:cloud-minecraft-extras:2.0.0-beta.17")
+    api("org.incendo:cloud-paper:2.0.1")
+    api("org.incendo:cloud-minecraft-extras:2.0.1")
     api("org.incendo:cloud-processors-confirmation:1.0.0-rc.1")
 
     // Dependency injection
@@ -118,7 +122,7 @@ tasks {
 
         // Set the release flag. This configures what version bytecode the compiler will emit, as well as what JDK APIs are usable.
         // See https://openjdk.java.net/jeps/247 for more information.
-        options.release.set(21)
+        options.release.set(paperJavaVersion)
     }
 
     java {

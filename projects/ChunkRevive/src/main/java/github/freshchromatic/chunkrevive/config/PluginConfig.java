@@ -345,8 +345,11 @@ public final class PluginConfig implements Config {
     @ConfigSerializable
     public static class Scan {
         @Setting("min-persisted-status")
-        @Comment("Only chunks whose on-disk persisted status is at or beyond this value count as \"already existing\" for fullmark/radiusmark.\n"
-            + "One of: NOISE, BIOMES, STRUCTURE_STARTS, STRUCTURE_REFERENCES, SURFACE, CARVERS, FEATURES, LIGHT, SPAWN, FULL.")
+        @Comment("Minimum saved generation stage for fullmark/radiusmark; includes this stage and later stages. Does not control regeneration.\n"
+            + "Stages: STRUCTURE_STARTS -> STRUCTURE_REFERENCES -> BIOMES -> NOISE -> SURFACE -> CARVERS -> FEATURES -> LIGHT -> SPAWN -> FULL.\n"
+            + "26.3 merges NOISE -> SURFACE -> CARVERS into TERRAIN; ChunkRevive treats saved TERRAIN as CARVERS.\n"
+            + "TERRAIN is a CARVERS alias on all supported versions: terrain complete, later stages may be unfinished.\n"
+            + "FULL (default/fallback for invalid values) requires fully generated chunks.")
         public String minPersistedStatus = "FULL";
 
         @Setting("check-residence-claims")
