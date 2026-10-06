@@ -10,6 +10,7 @@
 **/docs/
 **/dist-test/
 
+experimental
 docs/output/
 backend/src/main/resources/frontend
 backend/out
