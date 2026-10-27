@@ -31,15 +31,47 @@ When a comment is necessary, explain why the constraint exists. Do not narrate t
 - Prefer composition and small interfaces over deep inheritance.
 - Introduce abstractions to solve concrete repetition or boundary problems, not speculative future requirements.
 
-### Readable formatting
+### Java layout and formatting
 
-- Do not over-compress code.
+- Follow the self-contained rules and examples in this document for field grouping, column alignment, and call layout. Preserve this project's architecture, domain naming, and behavior when formatting code.
+- Use conventional project formatting: compact where simple, expanded where complexity requires it. Avoid both compressed one-line logic and unnecessarily tall code.
+- Use four-space indentation, four-space continuation indentation, and a preferred Java line width of 120 characters. Readable method declarations and indivisible expressions may exceed it; do not force a staircase solely to meet the target.
+- Group fields by responsibility: constants, injected dependencies, related collections, and mutable session or UI state. Separate those groups with one blank line.
+- Align field names and `=` within a related, uninterrupted group. Start a new alignment group after a blank line; do not align unrelated groups, local variables, or ordinary assignment statements.
+- Keep constructor dependency assignments together, and separate them from collection initialization when that distinction improves readability. Use `this.field = parameter` when assigning constructor parameters to fields.
+- Keep a simple declaration and its initializer on the same line when they fit. Do not put `=` on a separate line from a short initializer.
+- Keep simple method calls, short lambdas, argument lists, and short call chains together when they fit. Do not require one argument, chained method, or nested call per line.
+- Wrap expressions only when their length or logical structure warrants it. Prefer natural argument or expression boundaries, and avoid staircase formatting for ordinary expressions.
 - Do not place multiple statements, branches, exception handlers, or method definitions on one line.
-- Avoid nested ternaries, long call chains, and large lambdas for business logic.
+- Keep control-flow blocks and multi-statement lambdas expanded with braces. Short expression lambdas may stay inline.
+- Avoid nested ternaries, difficult call chains, and large lambdas for business logic.
 - Extract complex boolean conditions into clearly named variables or methods.
-- Format DTO construction, error responses, command results, and transaction flows across readable lines.
+- Expand DTO construction, error responses, command results, and transaction flows when they are genuinely complex; do not expand short constructions solely because of their type or purpose.
 - Use request or value objects when a method requires too many parameters.
 - Do not shorten names or collapse structure merely to reduce line count.
+- Do not introduce helper methods or temporary variables solely to satisfy an overly aggressive line-wrapping rule.
+- Keep the start of a multiline initialization with its declaration, such as `var row = action(`. Keep natural outer call openings together, such as `rows.add(StatusRow.info(`, rather than putting each wrapper on its own line.
+- For long declarative calls, group short related arguments on the same line and put substantial values or nested blocks on subsequent lines. Preserve the visual structure of configuration lists instead of blindly putting every argument on a separate line.
+- Use the configurable Eclipse JDT profile in `tools/java-format.properties` through `tools/format-code.ps1`. Do not run Google Java Format/AOSP over these sources; it removes the intended alignment and imposes a different wrapping style.
+
+Preferred for simple expressions:
+
+```java
+LevelChunk chunk = level.getChunkSource().getChunk(x, z, ChunkStatus.FULL, false);
+rows.add(SettingsAddon.StatusRow.info(tr("phase"), () -> tr("phase." + session.phaseKey())));
+```
+
+Use multiple lines for substantial argument lists or actual blocks of logic, not for every syntactic layer of a simple call.
+
+Preferred for related fields:
+
+```java
+private static final int NEAR_REFRESH_TICKS = 20;
+private static final int FAR_REFRESH_TICKS  = 200;
+
+private final Map<Long, LevelChunk> scanned;
+private final Map<Long, Long>       lastScannedTick;
+```
 
 ### Stable domain naming
 
