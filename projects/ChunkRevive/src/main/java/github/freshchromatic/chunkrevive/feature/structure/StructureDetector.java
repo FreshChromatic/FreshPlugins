@@ -16,8 +16,12 @@ public final class StructureDetector {
     private final WorldInspectionGateway inspection;
 
     public StructureDetector(PluginConfig config) {
+        this(config, NmsPlatformLoader.load().worldInspection());
+    }
+
+    StructureDetector(PluginConfig config, WorldInspectionGateway inspection) {
         this.config = config;
-        this.inspection = NmsPlatformLoader.load().worldInspection();
+        this.inspection = inspection;
     }
 
     public void setConfig(PluginConfig config) {

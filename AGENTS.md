@@ -20,6 +20,12 @@ Comments are appropriate only for:
 
 When a comment is necessary, explain why the constraint exists. Do not narrate the implementation line by line.
 
+### Boundaries and complexity
+
+- Validate unknown values once at the boundary that owns them. Pass typed values inward instead of repeating type and property-existence checks. Do not defensively revalidate guarantees already established by a schema, constructor, or internal type.
+- Before adding complexity for a speculative or vanishingly unlikely race or security edge case, explain the concrete failure mode, likelihood, and complexity cost to the user and get their buy-in. Do not silently expand scope for theoretical robustness.
+- Prefer early returns when they make control flow clearer. Avoid unnecessary reassignment and use immutable values where practical.
+
 ### OOP and modular design
 
 - Keep each class, component, and module focused on one responsibility.
@@ -91,3 +97,29 @@ Reconsider the design when:
 - A test must construct many unrelated dependencies to verify one behavior.
 
 Split responsibilities with explicit dependencies and independently testable modules. Do not move the same complexity into a generic `Utils` class, service locator, or global store.
+
+### TypeScript and JavaScript
+
+- Avoid `any`; use `unknown` at untrusted boundaries and narrow it before use.
+- Prefer type inference for local values when the inferred type is clear. Add explicit types where they clarify a boundary or exported API.
+- Prefer `const` over `let`. Use an expression or early return instead of reassignment when it improves clarity.
+- Avoid unnecessary destructuring when dot notation better preserves context. Inline a value used only once when doing so improves readability.
+- Prefer array operations such as `map`, `filter`, and `flatMap` when they express the transformation clearly. Use type guards when filtering should narrow the result type.
+
+- Keep imports clear and consistent with the surrounding module. Avoid aliases and namespace imports unless they resolve a real naming or module-boundary need.
+- For heavy modules used only on selected paths, prefer dynamic imports when appropriate. Keep the import in the narrowest useful scope and bind its exports clearly rather than chaining work directly onto the import.
+
+### Complex logic
+
+- Keep logic in one function unless separating it makes the behavior composable or reusable, clarifies a complex boundary, or gives a meaningful concept an independent name. Organize the function so its main path is easy to follow.
+- Do not extract single-use helpers preemptively. Inline logic at the call site unless the helper is reused, hides a genuinely complex boundary, or has a clear independent name that improves the caller. Keep necessary helpers close to the code they support.
+- Avoid `try`/`catch` where possible. Handle errors at the boundary that owns them and do not suppress errors.
+- Keep synchronous parsing, validation, and value construction synchronous unless they actually require asynchronous or effectful work.
+- Prefer the project's established schema and validation tools over hand-written parsing of untrusted input when they provide equivalent behavior.
+
+## Testing
+
+- Test the actual implementation and observable behavior rather than duplicating implementation logic in tests.
+- Prefer real, focused dependencies over mocks where practical. Use mocks when they make a boundary test clearer or avoid unreliable external effects.
+- Avoid modifying global state in tests unless there is no suitable alternative; restore any modified state after the test.
+- Run the checks and tests appropriate to the affected code, following the existing project and package workflows.

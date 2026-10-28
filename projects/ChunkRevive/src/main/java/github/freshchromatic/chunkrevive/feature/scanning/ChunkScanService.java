@@ -3,6 +3,7 @@ package github.freshchromatic.chunkrevive.feature.scanning;
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
+import github.freshchromatic.chunkrevive.feature.marking.ProtectedMarkExecutor;
 import github.freshchromatic.chunkrevive.nms.BiomeMatchMode;
 import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.nms.ChunkStage;
@@ -33,6 +34,7 @@ public final class ChunkScanService {
     private final DiskChunkScanner scanner;
     private final WorldScanGateway worldScan;
     private final Supplier<PluginConfig> config;
+    private final ProtectedMarkExecutor protectedMarks;
     private final ConcurrentHashMap<BiomeDetectionKey, CompletableFuture<BiomeDetection>>
         biomeDetections = new ConcurrentHashMap<>();
 
@@ -40,11 +42,13 @@ public final class ChunkScanService {
             MarkRegistry markRegistry,
             DiskChunkScanner scanner,
             WorldScanGateway worldScan,
-            Supplier<PluginConfig> config) {
+            Supplier<PluginConfig> config,
+            ProtectedMarkExecutor protectedMarks) {
         this.markRegistry = markRegistry;
         this.scanner = scanner;
         this.worldScan = worldScan;
         this.config = config;
+        this.protectedMarks = protectedMarks;
     }
 
     public CompletableFuture<DiskChunkScanner.ScanResult> scan(
@@ -111,7 +115,7 @@ public final class ChunkScanService {
 
     public List<MarkedChunk> buildBiomeCandidates(World world, List<ChunkCoordinate> chunks) {
         var cfg = config.get();
-        boolean checkClaims = cfg.scan.checkResidenceClaims && markRegistry.getLandProtection().isEnabled();
+        boolean checkClaims = cfg.landProtection.scanClaims && markRegistry.getLandProtection().isEnabled();
         long now = System.currentTimeMillis();
         List<MarkedChunk> result = new ArrayList<>();
         for (ChunkCoordinate pos : chunks) {
@@ -121,12 +125,18 @@ public final class ChunkScanService {
         return List.copyOf(result);
     }
 
-    public List<MarkedChunk> markCandidates(List<MarkedChunk> candidates) {
-        return markRegistry.markChunksBatch(candidates);
+    public CompletableFuture<ProtectedMarkExecutor.BatchResult> markCandidates(List<MarkedChunk> candidates) {
+        return mark(candidates, true);
     }
 
-    public List<MarkedChunk> markDirect(List<MarkedChunk> candidates) {
-        return markRegistry.markChunksDirect(candidates);
+    public CompletableFuture<ProtectedMarkExecutor.BatchResult> markDirect(List<MarkedChunk> candidates) {
+        return mark(candidates, false);
+    }
+
+    private CompletableFuture<ProtectedMarkExecutor.BatchResult> mark(List<MarkedChunk> candidates, boolean batch) {
+        if (config.get().landProtection.scanClaims) return protectedMarks.markBatch(candidates, batch);
+        List<MarkedChunk> added = batch ? markRegistry.markChunksBatch(candidates) : markRegistry.markChunksDirect(candidates);
+        return CompletableFuture.completedFuture(new ProtectedMarkExecutor.BatchResult(List.copyOf(candidates), added));
     }
 
     public boolean isRegenerationRunning() {

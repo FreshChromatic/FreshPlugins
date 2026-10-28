@@ -5,6 +5,7 @@ import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
 import github.freshchromatic.chunkrevive.config.WorldAccessPolicy;
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
+import github.freshchromatic.chunkrevive.feature.marking.ProtectedMarkExecutor;
 import github.freshchromatic.freshlib.scheduler.ScheduledTask;
 import github.freshchromatic.freshlib.scheduler.Scheduler;
 import github.freshchromatic.freshlib.util.Components;
@@ -19,24 +20,28 @@ import java.util.List;
 /** Periodically refreshes structure groups whose refresh period has elapsed. */
 public final class StructureRefreshScheduler {
 
-    private final Plugin plugin;
-    private final StructureRegistry structureRegistry;
-    private final MarkRegistry markRegistry;
-    private final WorldAccessPolicy worldAccessPolicy;
+    private final Plugin                plugin;
+    private final StructureRegistry     structureRegistry;
+    private final MarkRegistry          markRegistry;
+    private final WorldAccessPolicy     worldAccessPolicy;
+    private final ProtectedMarkExecutor protectedMarks;
+
     private PluginConfig config;
-    private Messages messages;
+    private Messages     messages;
 
     private ScheduledTask task;
+    private volatile boolean checking;
 
     public StructureRefreshScheduler(Plugin plugin, PluginConfig config, Messages messages,
                                       StructureRegistry structureRegistry, MarkRegistry markRegistry,
-                                      WorldAccessPolicy worldAccessPolicy) {
+                                      WorldAccessPolicy worldAccessPolicy, ProtectedMarkExecutor protectedMarks) {
         this.plugin = plugin;
         this.config = config;
         this.messages = messages;
         this.structureRegistry = structureRegistry;
         this.markRegistry = markRegistry;
         this.worldAccessPolicy = worldAccessPolicy;
+        this.protectedMarks = protectedMarks;
     }
 
     public void setConfig(PluginConfig config) {
@@ -63,7 +68,7 @@ public final class StructureRefreshScheduler {
 
     private void tick() {
         if (!config.structure.enabled || !config.structure.refresh.enabled) return;
-        if (markRegistry.getRegenerationQueue().isRunning()) return;
+        if (checking || markRegistry.getRegenerationQueue().isRunning()) return;
         long now = System.currentTimeMillis();
         long intervalTicks = Math.max(20L, config.structure.refresh.checkIntervalTicks);
 
@@ -99,16 +104,30 @@ public final class StructureRefreshScheduler {
                 groupChunks.add(new MarkedChunk(group.world(), coord[0], coord[1], group.groupId(), now, group.groupId()));
             }
             dueChunks.addAll(groupChunks);
-
-            adminBroadcastAudience().sendMessage(messages.structure.refreshStart.withPlaceholders(
-                Components.placeholder("structure_name", StructureRegistry.displayName(group.structureId())),
-                Components.placeholder("count", String.valueOf(groupChunks.size()))));
         }
 
         if (dueChunks.isEmpty()) return;
-        markRegistry.markChunksDirect(dueChunks);
-        markRegistry.getRegenerationQueue().start(dueChunks, adminBroadcastAudience(),
-            batch -> markRegistry.onChunksRegenComplete(batch));
+        checking = true;
+        protectedMarks.markBatch(dueChunks, false).whenComplete((outcome, failure) -> {
+            checking = false;
+            if (failure != null) {
+                plugin.getLogger().warning("Structure refresh protection check failed: " + failure.getMessage());
+                return;
+            }
+            if (task == null || !config.structure.enabled || !config.structure.refresh.enabled
+                    || outcome.eligible().isEmpty() || markRegistry.getRegenerationQueue().isRunning()) return;
+            for (StructureGroup group : List.copyOf(structureRegistry.getAllGroups())) {
+                long count = outcome.eligible().stream()
+                    .filter(chunk -> group.groupId().equals(chunk.structureGroupId())).count();
+                if (count > 0) {
+                    adminBroadcastAudience().sendMessage(messages.structure.refreshStart.withPlaceholders(
+                        Components.placeholder("structure_name", StructureRegistry.displayName(group.structureId())),
+                        Components.placeholder("count", String.valueOf(count))));
+                }
+            }
+            markRegistry.getRegenerationQueue().start(outcome.eligible(), adminBroadcastAudience(),
+                batch -> markRegistry.onChunksRegenComplete(batch));
+        });
     }
 
     private Audience adminBroadcastAudience() {

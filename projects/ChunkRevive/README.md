@@ -47,6 +47,22 @@ ChunkRevive is also commonly used after world updates, making it easy to generat
 
 <h2>
   <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
+  &nbsp;Third-Party Land-Protection Support
+</h2>
+
+- [Residence](https://www.spigotmc.org/resources/residence-1-7-10-up-to-26-3.11480/)
+- [GriefPrevention](https://modrinth.com/plugin/griefprevention)
+- [GriefDefender](https://www.spigotmc.org/resources/1-12-2-26-3-griefdefender-claim-plugin-grief-prevention-protection.68900/)
+- [Towny](https://modrinth.com/plugin/towny)
+- [WorldGuard](https://modrinth.com/plugin/worldguard)
+- [Dominion](https://modrinth.com/plugin/lunadeer-dominion)
+- [Homestead](https://modrinth.com/plugin/homestead-plugin)
+- [ChunkClaimPlugin](https://modrinth.com/plugin/chunkclaimplugin)
+- [LandClaimPlugin](https://modrinth.com/plugin/landclaimplugin)
+- [Bonfire](https://modrinth.com/plugin/bonfire)
+
+<h2>
+  <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
   &nbsp;Requirements
 </h2>
 
@@ -61,33 +77,3 @@ ChunkRevive requires the following:
 </h2>
 
 - [Dominion](https://github.com/LunaDeerMC/Dominion) - Text User Interface (TUI)
-
-<h2>
-  <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
-  &nbsp;Afterword
-</h2>
-
-This project was fully led and edited by tcib_cat, who was responsible for its overall planning and direction. From the initial concept, feature design, and code implementation to testing, maintenance, and documentation, every major stage of the project was developed and supervised by tcib_cat.
-
-The project originated from practical needs encountered during actual use. Its purpose is not only to address specific technical problems, but also to provide server owners and developers with a stable, practical, and accessible solution. Throughout development, the project’s features, code structure, performance, and compatibility were repeatedly reviewed and improved based on testing and real-world feedback.
-
-The completion and continued improvement of this project would not have been possible without the users and developers who participated in testing, reported issues, and provided suggestions. Their feedback, ideas, and usage experiences have contributed greatly to the development of the project. We would therefore like to express our sincere appreciation to everyone who has supported, tested, and used it.
-
-Although this project is provided free of charge, its source code and development work may not be claimed, reused, or redistributed without proper acknowledgement. Anyone who uses, references, or modifies the project’s code must comply with the applicable license terms and clearly credit the original author and project.
-
-The use of this project primarily for profit is discouraged. These plugins are made available to servers free of charge, and their development does not provide the original developers with any substantial financial return. Repackaging, reselling, or commercially exploiting work that was freely shared by the original developers may negatively affect motivation to continue maintaining and releasing open-source projects. We therefore ask users and developers to respect the non-commercial spirit in which this project is provided.
-
-Original copyright notices, author information, and attribution must not be removed, hidden, or altered. The project, or any modified version of it, must not be renamed, repackaged, or presented as an independently developed work through minor code changes, additional features, or other forms of redistribution.
-
-Developers who create derivative works based on this project should clearly identify the original project and author, while also describing the changes or additions they have made. Respecting the work of the original developer is not only a basic form of acknowledgement, but also an essential part of maintaining a healthy and sustainable open-source community.
-
-As this project is primarily developed and maintained through personal time and effort, it may still contain limitations or areas that require improvement. We will continue to improve the project within our capabilities, but we cannot guarantee support for every use case or provide unlimited long-term technical assistance. We appreciate your understanding and encourage users to report issues and suggestions through the appropriate channels.
-
-Finally, we would once again like to thank everyone who has supported and followed this project. We hope it can continue to provide meaningful assistance to its users, and that every openly shared development effort receives the recognition and respect it deserves.
-
-<div align="right">
-
-**Lead Editor and Developer: tcib_cat** <br>
-**Development Team: FreshChromatic**
-
-</div>

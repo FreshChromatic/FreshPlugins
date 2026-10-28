@@ -26,6 +26,8 @@ public final class PluginConfig implements Config {
     public Structure structure = new Structure();
     public Worlds worlds = new Worlds();
     public Scan scan = new Scan();
+    @Setting("land-protection")
+    public LandProtection landProtection = new LandProtection();
     public Biome biome = new Biome();
     public Safety safety = new Safety();
     public Updates updates = new Updates();
@@ -33,6 +35,89 @@ public final class PluginConfig implements Config {
     @Setting("enable-debug-logs")
     @Comment("Whether to show detailed structure, terrain generation, and deletion diagnostic logs")
     public boolean enableDebugLogs = false;
+
+    @ConfigSerializable
+    public static class LandProtection {
+        @Setting("scan-claims")
+        @Comment("Check claims during bulk scans and biome selection. Regeneration and deletion always check enabled providers.")
+        public boolean scanClaims = true;
+
+        @Setting("default-structure-policy")
+        @Comment("Default structure overlap policy: EXCLUDE_CLAIMED, ABORT_WHOLE, or IGNORE_CLAIMS.")
+        public String defaultStructurePolicy = "EXCLUDE_CLAIMED";
+
+        public Providers providers = new Providers();
+
+        public Structure.PartialClaimPolicy defaultPolicy() {
+            return parsePolicy(defaultStructurePolicy, Structure.PartialClaimPolicy.EXCLUDE_CLAIMED);
+        }
+
+        public Structure.PartialClaimPolicy policy(String providerId) {
+            return policy(providerId, defaultPolicy());
+        }
+
+        public Structure.PartialClaimPolicy policy(String providerId, Structure.PartialClaimPolicy inherited) {
+            Provider provider = providers.byId(providerId);
+            if (provider == null || (provider.structurePolicy != null
+                    && "INHERIT".equalsIgnoreCase(provider.structurePolicy.trim()))) return inherited;
+            return parsePolicy(provider.structurePolicy, Structure.PartialClaimPolicy.ABORT_WHOLE);
+        }
+
+        private static Structure.PartialClaimPolicy parsePolicy(String value, Structure.PartialClaimPolicy fallback) {
+            try {
+                return Structure.PartialClaimPolicy.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException | NullPointerException exception) {
+                return fallback;
+            }
+        }
+
+        @ConfigSerializable
+        public static class Provider {
+            @Comment("Enable this integration when its plugin is installed. Changes require a server restart.")
+            public boolean enabled = true;
+            @Setting("structure-policy")
+            @Comment("INHERIT, EXCLUDE_CLAIMED, ABORT_WHOLE, or IGNORE_CLAIMS.")
+            public String structurePolicy = "INHERIT";
+        }
+
+        @ConfigSerializable
+        public static class Providers {
+            public static final java.util.List<String> IDS = java.util.List.of(
+                "residence", "griefprevention", "griefdefender", "towny", "worldguard", "dominion", "homestead",
+                "ccp", "landclaimplugin", "bonfire");
+
+            public Provider residence = new Provider();
+            @Setting("grief-prevention")
+            public Provider griefPrevention = new Provider();
+            @Setting("grief-defender")
+            public Provider griefDefender = new Provider();
+            public Provider towny = new Provider();
+            public Provider worldguard = new Provider();
+            public Provider dominion = new Provider();
+            public Provider homestead = new Provider();
+            @Setting("chunk-claim-plugin")
+            public Provider chunkClaimPlugin = new Provider();
+            @Setting("land-claim-plugin")
+            public Provider landClaimPlugin = new Provider();
+            public Provider bonfire = new Provider();
+
+            public Provider byId(String id) {
+                return switch (id) {
+                    case "residence" -> residence;
+                    case "griefprevention" -> griefPrevention;
+                    case "griefdefender" -> griefDefender;
+                    case "towny" -> towny;
+                    case "worldguard" -> worldguard;
+                    case "dominion" -> dominion;
+                    case "homestead" -> homestead;
+                    case "ccp" -> chunkClaimPlugin;
+                    case "landclaimplugin" -> landClaimPlugin;
+                    case "bonfire" -> bonfire;
+                    default -> null;
+                };
+            }
+        }
+    }
 
     @ConfigSerializable
     public static class Updates {
@@ -352,10 +437,6 @@ public final class PluginConfig implements Config {
             + "FULL (default/fallback for invalid values) requires fully generated chunks.")
         public String minPersistedStatus = "FULL";
 
-        @Setting("check-residence-claims")
-        @Comment("Whether fullmark/radiusmark apply the same Residence policy as structure marking (structure.residence.on-partial-claim)")
-        public boolean checkResidenceClaims = true;
-
         @Setting("radiusmark-max-radius-chunks")
         @Comment("Upper bound on /cr radiusmark's radius (chunks); larger ranges must use /cr fullmark instead")
         public int radiusmarkMaxRadiusChunks = 512;
@@ -457,7 +538,6 @@ public final class PluginConfig implements Config {
         public Detect detect = new Detect();
         public Mark mark = new Mark();
         public Refresh refresh = new Refresh();
-        public Residence residence = new Residence();
         public Protection protection = new Protection();
         @Setting("entity-exemptions")
         public EntityExemptions entityExemptions = new EntityExemptions();
@@ -540,21 +620,6 @@ public final class PluginConfig implements Config {
         }
 
         public enum PartialClaimPolicy { EXCLUDE_CLAIMED, ABORT_WHOLE, IGNORE_CLAIMS }
-
-        @ConfigSerializable
-        public static class Residence {
-            @Setting("on-partial-claim")
-            @Comment("How to handle Residence claims overlapping a structure range: EXCLUDE_CLAIMED, ABORT_WHOLE, or IGNORE_CLAIMS")
-            public String onPartialClaim = PartialClaimPolicy.EXCLUDE_CLAIMED.name();
-
-            public PartialClaimPolicy onPartialClaimEnum() {
-                try {
-                    return PartialClaimPolicy.valueOf(onPartialClaim.trim().toUpperCase(java.util.Locale.ROOT));
-                } catch (IllegalArgumentException e) {
-                    return PartialClaimPolicy.EXCLUDE_CLAIMED;
-                }
-            }
-        }
 
         @ConfigSerializable
         public static class Protection {

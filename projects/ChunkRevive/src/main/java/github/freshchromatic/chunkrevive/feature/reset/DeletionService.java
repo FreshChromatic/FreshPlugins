@@ -5,6 +5,11 @@ import github.freshchromatic.chunkrevive.config.Messages;
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
+import github.freshchromatic.chunkrevive.api.integration.MaintenanceAction;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionBatchResult;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionDecision;
+import github.freshchromatic.chunkrevive.api.model.ChunkKey;
+import github.freshchromatic.chunkrevive.integration.protection.ProtectionChecks;
 import github.freshchromatic.chunkrevive.nms.ChunkArea;
 import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.nms.ChunkStorageGateway;
@@ -57,6 +62,7 @@ public final class DeletionService {
     private final MarkRegistry markRegistry;
     private final DeletionJobStore repository;
     private final ChunkStorageGateway chunkStorage;
+    private final ProtectionChecks protectionChecks;
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
     private final AtomicBoolean workerActive = new AtomicBoolean();
     private volatile PluginConfig config;
@@ -77,13 +83,14 @@ public final class DeletionService {
 
     public DeletionService(ChunkRevivePlugin plugin, MarkRegistry markRegistry,
                                  DeletionJobStore repository,
-                                 PluginConfig config, Messages messages) {
+                                 PluginConfig config, Messages messages, ProtectionChecks protectionChecks) {
         this.plugin = plugin;
         this.markRegistry = markRegistry;
         this.repository = repository;
         this.chunkStorage = NmsPlatformLoader.load().chunkStorage();
         this.config = config;
         this.messages = messages;
+        this.protectionChecks = protectionChecks;
     }
 
     public void start() {
@@ -330,7 +337,7 @@ public final class DeletionService {
         List<Job> batch = new ArrayList<>();
         for (Job job : limitedCandidates) {
             if (markRegistry.getLandProtection().hasClaim(world, job.x, job.z)) {
-                fail(job, "Chunk is protected by Residence");
+                fail(job, "Chunk is protected by a land plugin");
             } else {
                 job.protectionChecked = true;
                 batch.add(job);
@@ -380,10 +387,32 @@ public final class DeletionService {
             return;
         }
 
+        List<ChunkKey> keys = batch.stream().map(job -> new ChunkKey(job.world, job.x, job.z)).toList();
+        ProtectionSnapshot protection;
+        try {
+            protection = checkProtection(MaintenanceAction.DELETE_CHUNK, keys);
+        } catch (RuntimeException failure) {
+            batch.forEach(job -> fail(job, "Protection check unavailable: " + failure.getMessage()));
+            return;
+        }
+        if (protection.revision() != protectionChecks.revision() || stopping) {
+            batch.forEach(job -> fail(job, "Protection changed before deletion"));
+            return;
+        }
+        if (hasNearbyPlayer(world, minX, maxX, minZ, maxZ)
+                || chunkStorage.firstHolder(world, new ChunkArea(minX, maxX, minZ, maxZ)).isPresent()) {
+            batch.forEach(job -> {
+                job.coldChecks = 0;
+                job.waitingReason = messages.text("deletion-cold-check");
+            });
+            return;
+        }
+
         List<Job> ready = new ArrayList<>();
         for (Job job : batch) {
-            if (markRegistry.getLandProtection().hasClaim(world, job.x, job.z)) {
-                fail(job, "Chunk is protected by Residence");
+            if (protection.denied(new ChunkKey(job.world, job.x, job.z))
+                    || markRegistry.getLandProtection().hasClaim(world, job.x, job.z)) {
+                fail(job, "Chunk is protected by a land plugin");
                 continue;
             }
             synchronized (job) {
@@ -394,6 +423,11 @@ public final class DeletionService {
             }
         }
         if (ready.isEmpty()) return;
+
+        if (protection.revision() != protectionChecks.revision() || stopping) {
+            ready.forEach(job -> fail(job, "Protection changed before deletion"));
+            return;
+        }
 
         List<UUID> readyIds = ready.stream().map(job -> job.id).toList();
         repository.updateDeletionJobStates(readyIds, State.RUNNING.name());
@@ -428,7 +462,7 @@ public final class DeletionService {
         if (job.type == Type.CHUNK_DELETE) {
             if (!job.protectionChecked) {
                 if (markRegistry.getLandProtection().hasClaim(world, job.x, job.z)) {
-                    fail(job, "Chunk is protected by Residence");
+                    fail(job, "Chunk is protected by a land plugin");
                     return;
                 }
                 job.protectionChecked = true;
@@ -440,7 +474,7 @@ public final class DeletionService {
             if (job.type == Type.REGION_PRUNE && !job.protectionChecked) {
                 if (regionHasResidence(world, region)) {
                     job.state = State.FAILED;
-                    job.failure = "Region contains a Residence claim";
+                    job.failure = "Region contains a protected claim";
                     repository.updateDeletionJobState(job.id, State.FAILED.name());
                     job.requester.sendMessage(messages.deletion.protectedRegion.withPlaceholders(
                         Components.placeholder("rx", String.valueOf(region.x())),
@@ -550,16 +584,51 @@ public final class DeletionService {
             return null;
         }
 
+        ProtectionSnapshot protection = null;
+        if (job.type != Type.EMPTY_REGION_PRUNE) {
+            List<ChunkKey> keys = new ArrayList<>();
+            if (job.type == Type.CHUNK_DELETE) {
+                keys.add(new ChunkKey(job.world, job.x, job.z));
+            } else {
+                AnvilRegionPos region = new AnvilRegionPos(job.x, job.z);
+                for (int x = region.minChunkX(); x <= region.maxChunkX(); x++) {
+                    for (int z = region.minChunkZ(); z <= region.maxChunkZ(); z++) keys.add(new ChunkKey(job.world, x, z));
+                }
+            }
+            MaintenanceAction action = job.type == Type.CHUNK_DELETE
+                ? MaintenanceAction.DELETE_CHUNK : MaintenanceAction.PRUNE_REGION;
+            protection = checkProtection(action, keys);
+            if (stopping || protection.revision() != protectionChecks.revision()
+                    || keys.stream().anyMatch(protection::denied)) {
+                fail(job, "Chunk or region is protected by a land plugin");
+                return null;
+            }
+            if (hasNearbyPlayer(world, fencedMinX, fencedMaxX, fencedMinZ, fencedMaxZ)
+                    || chunkStorage.firstHolder(world, new ChunkArea(fencedMinX, fencedMaxX, fencedMinZ, fencedMaxZ)).isPresent()) {
+                job.coldChecks = 0;
+                job.waitingReason = messages.text("deletion-cold-check");
+                return null;
+            }
+            if (protection.revision() != protectionChecks.revision() || stopping) {
+                fail(job, "Protection changed before deletion");
+                return null;
+            }
+        }
+
         // Claims can be created while a job waits for chunks to unload; validate immediately
         // before queueing the destructive I/O.
         if (job.type == Type.CHUNK_DELETE
             && markRegistry.getLandProtection().hasClaim(world, job.x, job.z)) {
-            fail(job, "Chunk is protected by Residence");
+            fail(job, "Chunk is protected by a land plugin");
             return null;
         }
         if (job.type == Type.REGION_PRUNE
             && regionHasResidence(world, new AnvilRegionPos(job.x, job.z))) {
-            fail(job, "Region contains a Residence claim");
+            fail(job, "Region contains a protected claim");
+            return null;
+        }
+        if (protection != null && (stopping || protection.revision() != protectionChecks.revision())) {
+            fail(job, "Protection changed before deletion");
             return null;
         }
         synchronized (job) {
@@ -575,6 +644,34 @@ public final class DeletionService {
             case EMPTY_REGION_PRUNE -> chunkStorage.pruneEmptyRegion(
                 world, job.x, job.z, config.deletion.forceRegionFileToDisk);
         };
+    }
+
+    private record ProtectionSnapshot(long revision, ProtectionBatchResult result) {
+        boolean denied(ChunkKey chunk) {
+            return result.decisions().getOrDefault(chunk, ProtectionDecision.ABSTAIN) == ProtectionDecision.DENY;
+        }
+    }
+
+    private ProtectionSnapshot checkProtection(MaintenanceAction action, List<ChunkKey> chunks) {
+        var result = new CompletableFuture<ProtectionSnapshot>();
+        try {
+            Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                try {
+                    long revision = protectionChecks.revision();
+                    protectionChecks.check(action, chunks).whenComplete((value, failure) -> {
+                        if (failure != null) result.completeExceptionally(failure);
+                        else if (value == null) result.completeExceptionally(new IllegalStateException("Empty protection result"));
+                        else result.complete(new ProtectionSnapshot(revision, value));
+                    });
+                } catch (Throwable failure) {
+                    result.completeExceptionally(failure);
+                }
+            });
+            return result.get(5, TimeUnit.SECONDS);
+        } catch (Exception failure) {
+            if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+            throw new IllegalStateException("Protection provider did not respond", failure);
+        }
     }
 
     private boolean hasNearbyPlayer(World world, int minX, int maxX, int minZ, int maxZ) {

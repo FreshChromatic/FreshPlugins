@@ -84,7 +84,7 @@ public final class Messages implements Config {
         values.put("structure-scheduled", "Scheduled");
         values.put("structure-refresh-in-days", "Refreshes in %s days");
         values.put("structure-not-found", "Structure group not found.");
-        values.put("structure-claim-blocked", "The range contains a Residence claim; forced refresh was aborted.");
+        values.put("structure-claim-blocked", "The range contains a protected claim; forced refresh was aborted.");
         values.put("structure-unblocked", "Protection has been removed from this structure.");
         values.put("structure-blocked", "This structure has been set to protected.");
         values.put("structure-reset", "The structure's status and refresh timer have been reset.");
@@ -108,7 +108,7 @@ public final class Messages implements Config {
         values.put("reset-no-deletable-world", "World %s contains no marked chunks that can be deleted.");
         values.put("reset-delete-marked-confirm", "You are about to schedule deletion of %1$s ChunkRevive-marked chunks. Enter \"%3$s\" within %2$s seconds to confirm.");
         values.put("reset-structure-empty", "This structure no longer contains any marked chunks.");
-        values.put("reset-structure-claim-blocked", "This structure range contains Residence-protected chunks; deleting the structure was refused.");
+        values.put("reset-structure-claim-blocked", "This structure range contains protected chunks; deleting the structure was refused.");
         values.put("reset-structure-confirm", "You are about to delete %2$s chunks in marked structure %1$s. Enter \"/cr delete here struct --confirm\" within %3$s seconds to confirm.");
         values.put("regen-structure-confirm", "You are about to regenerate %1$s chunks in the marked structure. Enter \"/cr regen here struct --confirm\" within %2$s seconds to confirm.");
         values.put("reset-single-confirm", "The reset strategy will perform %4$s on %1$s %2$s,%3$s. Enter \"%6$s\" within %5$s seconds to confirm.");
@@ -147,7 +147,7 @@ public final class Messages implements Config {
         values.put("status-memory", "Memory Usage");
         values.put("status-players", "Online Players");
         values.put("status-marked-chunks", "Marked Chunks");
-        values.put("status-residence-blocked", "Residence-Blocked Regeneration Chunks");
+        values.put("status-residence-blocked", "Protection-Blocked Regeneration Chunks");
         values.put("status-gen-thread-value", "%s / %s (configured: %s)");
         values.put("status-marked-chunks-value", "%s (individual: %s, structure: %s)");
         values.put("status-concurrency", "Current Concurrency");
@@ -311,7 +311,7 @@ public final class Messages implements Config {
         public ComponentMessage already = new ComponentMessage("<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>Chunk <cx_cz> is already in the marked list.");
 
         @Setting("residence-blocked")
-        public ComponentMessage residenceBlocked = new ComponentMessage("<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>Chunk <cx_cz> is inside a Residence-protected area and cannot be marked.");
+        public ComponentMessage residenceBlocked = new ComponentMessage("<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>Chunk <cx_cz> is inside a protected area and cannot be marked.");
 
         @Setting("follow-on")
         public ComponentMessage followOn = new ComponentMessage("<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FBFF8B>Follow-mark mode enabled. Chunks you walk through will be marked automatically.");
@@ -351,7 +351,7 @@ public final class Messages implements Config {
         public ComponentMessage noneMarked = new ComponentMessage("<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>There are currently no marked chunks.");
 
         @Setting("residence-blocked")
-        public ComponentMessage residenceBlocked = new ComponentMessage("<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>Chunk <cx_cz> is inside a Residence-protected area; regeneration skipped.");
+        public ComponentMessage residenceBlocked = new ComponentMessage("<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>Chunk <cx_cz> is inside a protected area; regeneration skipped.");
 
         @Setting("confirm-required")
         public ComponentMessage confirmRequired = new ComponentMessage(
@@ -420,7 +420,7 @@ public final class Messages implements Config {
         public ComponentMessage regionConfirmRequired = new ComponentMessage(
             "<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>You are about to schedule cleanup of physical region <#FBFF8B>r.<rx>.<rz><#FFAA00> in world <#FBFF8B><world><#FFAA00> (up to 1,024 chunks). Enter \"<#FBFF8B><command> --confirm<#FFAA00>\" within <timeout> seconds to confirm.");
         public ComponentMessage protectedRegion = new ComponentMessage(
-            "<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>Region r.<rx>.<rz> contains Residence-protected chunks; cleanup refused.");
+            "<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>Region r.<rx>.<rz> contains protected chunks; cleanup refused.");
         public ComponentMessage noJobs = new ComponentMessage(
             "<#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>There are currently no pending or active deletion/cleanup jobs.");
     }

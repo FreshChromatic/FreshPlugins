@@ -101,6 +101,10 @@ public final class MarkRegistry {
     }
 
     public MarkResult mark(String world, int cx, int cz, UUID markedBy) {
+        return markResolved(resolveMark(world, cx, cz, markedBy));
+    }
+
+    public List<MarkedChunk> resolveMark(String world, int cx, int cz, UUID markedBy) {
         var w = Bukkit.getWorld(world);
 
         List<MarkedChunk> toMark;
@@ -112,8 +116,11 @@ public final class MarkRegistry {
             toMark = List.of(new MarkedChunk(world, cx, cz, markedBy, System.currentTimeMillis()));
         }
 
-        if (toMark.isEmpty()) return MarkResult.RESIDENCE_BLOCKED;
+        return toMark;
+    }
 
+    public MarkResult markResolved(List<MarkedChunk> toMark) {
+        if (toMark.isEmpty()) return MarkResult.RESIDENCE_BLOCKED;
         List<MarkedChunk> newlyAdded = new ArrayList<>();
         for (MarkedChunk chunk : toMark) {
             if (markedChunks.putIfAbsent(chunk, chunk) == null) newlyAdded.add(chunk);
@@ -131,15 +138,10 @@ public final class MarkRegistry {
      * consult live world state.
      */
     public CompletableFuture<MarkResult> markPersisted(String world, int cx, int cz, UUID markedBy) {
-        var w = Bukkit.getWorld(world);
-        List<MarkedChunk> toMark;
-        if (w != null && structureMarkExpander != null) {
-            toMark = structureMarkExpander.expand(w, cx, cz, markedBy);
-        } else if (w != null && landProtection.hasClaim(w, cx, cz)) {
-            toMark = List.of();
-        } else {
-            toMark = List.of(new MarkedChunk(world, cx, cz, markedBy, System.currentTimeMillis()));
-        }
+        return markResolvedPersisted(resolveMark(world, cx, cz, markedBy));
+    }
+
+    public CompletableFuture<MarkResult> markResolvedPersisted(List<MarkedChunk> toMark) {
         if (toMark.isEmpty()) return CompletableFuture.completedFuture(MarkResult.RESIDENCE_BLOCKED);
 
         List<MarkedChunk> added = new ArrayList<>();

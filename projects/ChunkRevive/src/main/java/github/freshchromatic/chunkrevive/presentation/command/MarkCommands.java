@@ -9,6 +9,7 @@ import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
 import github.freshchromatic.freshlib.command.Commander;
 import github.freshchromatic.freshlib.command.PlayerCommander;
 import github.freshchromatic.freshlib.util.Components;
+import github.freshchromatic.freshlib.scheduler.Scheduler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import org.bukkit.Bukkit;
@@ -43,14 +44,10 @@ public final class MarkCommands {
         var chunk = player.getLocation().getChunk();
         String world = player.getWorld().getName();
         int cx = chunk.getX(), cz = chunk.getZ();
-        var result = markService.mark(world, cx, cz, player.getUniqueId());
         var mc = new MarkedChunk(world, cx, cz, player.getUniqueId(), 0);
-        player.sendMessage(switch (result) {
-            case SUCCESS -> messages.mark.success.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
-            case ALREADY_MARKED -> messages.mark.already.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
-            case CLAIM_BLOCKED -> messages.mark.residenceBlocked.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
-            case WORLD_NOT_ALLOWED -> messages.scan.worldNotAllowed.withPlaceholders(Components.placeholder("world", world));
-        });
+        markService.markAsync(world, cx, cz, player.getUniqueId()).whenComplete((result, failure) ->
+            Scheduler.runTask(plugin, () -> player.sendMessage(markMessage(
+                failure == null ? result : MarkService.MarkStatus.CLAIM_BLOCKED, mc)), player));
     }
 
     public void markCoordinates(CommandContext<Commander> ctx) {
@@ -59,14 +56,24 @@ public final class MarkCommands {
         int cx = ctx.get("cx");
         int cz = ctx.get("cz");
         UUID actor = sender instanceof PlayerCommander pc ? pc.player().getUniqueId() : UUID.randomUUID();
-        var result = markService.mark(world, cx, cz, actor);
         var mc = new MarkedChunk(world, cx, cz, actor, 0);
-        sender.sendMessage(switch (result) {
+        markService.markAsync(world, cx, cz, actor).whenComplete((result, failure) -> {
+            var message = markMessage(failure == null ? result : MarkService.MarkStatus.CLAIM_BLOCKED, mc);
+            if (sender instanceof PlayerCommander playerSender) {
+                Scheduler.runTask(plugin, () -> sender.sendMessage(message), playerSender.player());
+            } else {
+                sender.sendMessage(message);
+            }
+        });
+    }
+
+    private Component markMessage(MarkService.MarkStatus result, MarkedChunk mc) {
+        return switch (result) {
             case SUCCESS -> messages.mark.success.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
             case ALREADY_MARKED -> messages.mark.already.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
             case CLAIM_BLOCKED -> messages.mark.residenceBlocked.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
-            case WORLD_NOT_ALLOWED -> messages.scan.worldNotAllowed.withPlaceholders(Components.placeholder("world", world));
-        });
+            case WORLD_NOT_ALLOWED -> messages.scan.worldNotAllowed.withPlaceholders(Components.placeholder("world", mc.world()));
+        };
     }
 
     public void markFollow(CommandContext<PlayerCommander> ctx) {

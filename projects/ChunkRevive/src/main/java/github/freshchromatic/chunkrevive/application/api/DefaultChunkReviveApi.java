@@ -7,6 +7,7 @@ import github.freshchromatic.chunkrevive.api.operation.OperationApi;
 import github.freshchromatic.chunkrevive.api.worldgen.WorldGeneratorCompatibilityApi;
 import github.freshchromatic.chunkrevive.config.WorldAccessPolicy;
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
+import github.freshchromatic.chunkrevive.feature.marking.ProtectedMarkExecutor;
 import github.freshchromatic.chunkrevive.feature.reset.DeletionService;
 import github.freshchromatic.chunkrevive.feature.reset.ResetService;
 import github.freshchromatic.chunkrevive.feature.scanning.ChunkScanService;
@@ -17,6 +18,7 @@ import org.bukkit.plugin.Plugin;
 public final class DefaultChunkReviveApi implements ChunkReviveApi {
     private final Plugin plugin;
     private final MarkRegistry marks;
+    private final ProtectedMarkExecutor protectedMarks;
     private final WorldAccessPolicy worlds;
     private final DefaultIntegrationApi integrations;
     private final StructureService structures;
@@ -25,8 +27,10 @@ public final class DefaultChunkReviveApi implements ChunkReviveApi {
     private volatile boolean active = true;
     public DefaultChunkReviveApi(Plugin plugin, MarkRegistry marks, WorldAccessPolicy worlds, ResetService resets,
                                  DeletionService deletions, ChunkScanService scans, StructureService structures,
-                                 DefaultIntegrationApi integrations, OperationStore operationStore) {
+                                 DefaultIntegrationApi integrations, OperationStore operationStore,
+                                 ProtectedMarkExecutor protectedMarks) {
         this.plugin = plugin; this.marks = marks; this.worlds = worlds; this.structures = structures; this.integrations = integrations;
+        this.protectedMarks = protectedMarks;
         this.operationCoordinator = new OperationCoordinator(
             plugin, marks, resets, deletions, scans, worlds, generators, integrations, operationStore);
         integrations.setChangeListener(change -> operationCoordinator.invalidatePreviews());
@@ -35,7 +39,7 @@ public final class DefaultChunkReviveApi implements ChunkReviveApi {
     @Override public Capabilities capabilities() { return new DefaultCapabilities(); }
     @Override public ChunkReviveClient client(Plugin consumer) {
         if (!active || !consumer.isEnabled()) throw new IllegalStateException("ChunkRevive API is unavailable");
-        MarkApi markApi = new DefaultMarkApi(plugin, consumer, marks, worlds);
+        MarkApi markApi = new DefaultMarkApi(plugin, consumer, marks, worlds, protectedMarks);
         OperationApi operations = new DefaultOperationApi(consumer, operationCoordinator);
         var structureApi = new DefaultStructureApi(plugin, consumer, structures, marks, operationCoordinator);
         return new ChunkReviveClient() {
@@ -54,5 +58,9 @@ public final class DefaultChunkReviveApi implements ChunkReviveApi {
     }
     @Override public IntegrationApi integrations() { return integrations; }
     @Override public WorldGeneratorCompatibilityApi worldGenerators() { return generators; }
+    public void protectionSettingsChanged() {
+        integrations.protectionSettingsChanged();
+        operationCoordinator.invalidatePreviews();
+    }
     public void deactivate() { active = false; operationCoordinator.deactivate(); }
 }

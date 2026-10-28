@@ -3,6 +3,7 @@ package github.freshchromatic.chunkrevive.bootstrap;
 import com.github.retrooper.packetevents.PacketEvents;
 import github.freshchromatic.chunkrevive.feature.reset.ResetService;
 import github.freshchromatic.chunkrevive.feature.marking.MarkService;
+import github.freshchromatic.chunkrevive.feature.marking.ProtectedMarkExecutor;
 import github.freshchromatic.chunkrevive.feature.scanning.ChunkScanService;
 import github.freshchromatic.chunkrevive.feature.structure.StructureService;
 import github.freshchromatic.chunkrevive.presentation.command.ChunkReviveCommand;
@@ -36,7 +37,6 @@ import org.bukkit.plugin.ServicePriority;
 import github.freshchromatic.chunkrevive.api.ChunkReviveApi;
 import github.freshchromatic.chunkrevive.application.api.DefaultChunkReviveApi;
 import github.freshchromatic.chunkrevive.application.api.DefaultIntegrationApi;
-import github.freshchromatic.chunkrevive.integration.residence.ResidenceIntegration;
 import github.freshchromatic.chunkrevive.infrastructure.update.ModrinthUpdateChecker;
 
 /** Builds and starts the complete runtime component graph. */
@@ -75,8 +75,9 @@ final class ChunkReviveBootstrap {
         var repository = new PersistenceRepository(database);
         repository.init();
 
-        var protectionIntegration = ProtectionIntegrationLoader.load();
+        var protectionIntegration = ProtectionIntegrationLoader.load(() -> configManager.config().landProtection);
         var landProtection = protectionIntegration.landProtection();
+        var integrationApi = new DefaultIntegrationApi();
         var worldAccessPolicy = new WorldAccessPolicy(config);
 
         var structureRegistry = new StructureRegistry(repository, config, landProtection);
@@ -85,7 +86,7 @@ final class ChunkReviveBootstrap {
         var structureMarkExpander = new StructureMarkExpander(
             config, structureDetector, structureRegistry, landProtection);
 
-        var regenerationService = new RegenerationService(plugin, messages, landProtection);
+        var regenerationService = new RegenerationService(plugin, messages, landProtection, integrationApi);
         var markRegistry = new MarkRegistry(
             repository, regenerationService, config, messages, landProtection);
         markRegistry.setStructureMarkExpander(structureMarkExpander);
@@ -99,18 +100,19 @@ final class ChunkReviveBootstrap {
         displayService.start();
         markRegistry.setMarkDisplay(displayService);
 
+        var protectedMarks = new ProtectedMarkExecutor(plugin, markRegistry, integrationApi);
         var diskChunkScanner = new DiskChunkScanner(
-            markRegistry, structureRegistry, landProtection, config);
+            markRegistry, structureRegistry, landProtection, config, integrationApi, plugin);
         var chunkScanService = new ChunkScanService(
-            markRegistry, diskChunkScanner, NmsPlatformLoader.load().worldScan(), configManager::config);
+            markRegistry, diskChunkScanner, NmsPlatformLoader.load().worldScan(), configManager::config, protectedMarks);
 
         var deletionService = new DeletionService(
-            plugin, markRegistry, repository, config, messages);
+            plugin, markRegistry, repository, config, messages, integrationApi);
         deletionService.start();
 
-        var markService = new MarkService(markRegistry, worldAccessPolicy);
+        var markService = new MarkService(markRegistry, worldAccessPolicy, protectedMarks);
         var structureService = new StructureService(
-            markRegistry, structureRegistry, structureDetector, worldAccessPolicy);
+            markRegistry, structureRegistry, structureDetector, worldAccessPolicy, protectedMarks);
         var resetService = new ResetService(
             markRegistry, structureRegistry, worldAccessPolicy,
             deletionService, configManager::config);
@@ -128,7 +130,7 @@ final class ChunkReviveBootstrap {
         keepCommands.register();
 
         var refreshScheduler = new StructureRefreshScheduler(
-            plugin, config, messages, structureRegistry, markRegistry, worldAccessPolicy);
+            plugin, config, messages, structureRegistry, markRegistry, worldAccessPolicy, protectedMarks);
         refreshScheduler.start();
 
         var updateChecker = new ModrinthUpdateChecker(plugin, messagesManager::config);
@@ -139,14 +141,11 @@ final class ChunkReviveBootstrap {
             plugin, markService, structureService, displayService,
             messagesManager::config, configManager::config, protectionIntegration);
 
-        var integrationApi = new DefaultIntegrationApi();
         Bukkit.getPluginManager().registerEvents(integrationApi, plugin);
-        var publicApi = new DefaultChunkReviveApi(plugin, markRegistry, worldAccessPolicy, resetService, deletionService, chunkScanService, structureService, integrationApi, repository);
+        var publicApi = new DefaultChunkReviveApi(plugin, markRegistry, worldAccessPolicy, resetService, deletionService,
+            chunkScanService, structureService, integrationApi, repository, protectedMarks);
         Bukkit.getServicesManager().register(ChunkReviveApi.class, publicApi, plugin, ServicePriority.Normal);
-        if (protectionIntegration instanceof ResidenceIntegration residenceIntegration) {
-            var residence = Bukkit.getPluginManager().getPlugin("Residence");
-            if (residence != null) residenceIntegration.registerProvider(integrationApi, residence);
-        }
+        protectionIntegration.registerProviders(integrationApi.builtInRegistrar());
 
         return new PluginRuntime(
             plugin, configManager, messagesManager, database, markRegistry, displayService,

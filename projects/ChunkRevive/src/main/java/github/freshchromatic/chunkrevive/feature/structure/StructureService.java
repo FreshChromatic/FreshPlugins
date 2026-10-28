@@ -2,6 +2,7 @@ package github.freshchromatic.chunkrevive.feature.structure;
 
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
+import github.freshchromatic.chunkrevive.feature.marking.ProtectedMarkExecutor;
 import github.freshchromatic.chunkrevive.feature.structure.StructureDetector;
 import github.freshchromatic.chunkrevive.feature.structure.StructureGroup;
 import github.freshchromatic.chunkrevive.feature.structure.StructureRegistry;
@@ -13,6 +14,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /** Structure inspection, detection, state mutation and regeneration preparation use cases. */
 public final class StructureService {
@@ -22,20 +24,23 @@ public final class StructureService {
         RegenerationStatus status, StructureGroup group, List<MarkedChunk> chunks) {}
     public record Detection(String structureId, boolean newGroup, int newlyMarked) {}
 
-    private final MarkRegistry markRegistry;
-    private final StructureRegistry structureRegistry;
-    private final StructureDetector structureDetector;
-    private final WorldAccessPolicy worldAccessPolicy;
+    private final MarkRegistry          markRegistry;
+    private final StructureRegistry     structureRegistry;
+    private final StructureDetector     structureDetector;
+    private final WorldAccessPolicy     worldAccessPolicy;
+    private final ProtectedMarkExecutor protectedMarks;
 
     public StructureService(
             MarkRegistry markRegistry,
             StructureRegistry structureRegistry,
             StructureDetector structureDetector,
-            WorldAccessPolicy worldAccessPolicy) {
+            WorldAccessPolicy worldAccessPolicy,
+            ProtectedMarkExecutor protectedMarks) {
         this.markRegistry = markRegistry;
         this.structureRegistry = structureRegistry;
         this.structureDetector = structureDetector;
         this.worldAccessPolicy = worldAccessPolicy;
+        this.protectedMarks = protectedMarks;
     }
 
     public Optional<StructureGroup> findAt(String world, int cx, int cz) {
@@ -57,21 +62,21 @@ public final class StructureService {
             .toList();
     }
 
-    public RegenerationTarget prepareRegeneration(UUID groupId) {
+    public CompletableFuture<RegenerationTarget> prepareRegeneration(UUID groupId) {
         if (markRegistry.getRegenerationQueue().isRunning()) {
-            return new RegenerationTarget(RegenerationStatus.REGEN_BUSY, null, List.of());
+            return CompletableFuture.completedFuture(new RegenerationTarget(RegenerationStatus.REGEN_BUSY, null, List.of()));
         }
         StructureGroup group = get(groupId).orElse(null);
         if (group == null) {
-            return new RegenerationTarget(RegenerationStatus.NOT_FOUND, null, List.of());
+            return CompletableFuture.completedFuture(new RegenerationTarget(RegenerationStatus.NOT_FOUND, null, List.of()));
         }
         if (!worldAccessPolicy.isAllowed(group.world(), WorldAccessPolicy.Scope.REGEN)) {
-            return new RegenerationTarget(RegenerationStatus.WORLD_NOT_ALLOWED, group, List.of());
+            return CompletableFuture.completedFuture(new RegenerationTarget(RegenerationStatus.WORLD_NOT_ALLOWED, group, List.of()));
         }
         var effective = structureRegistry.resolveEffectiveChunks(
             group.world(), group.minChunkX(), group.maxChunkX(), group.minChunkZ(), group.maxChunkZ());
         if (effective == null || effective.isEmpty()) {
-            return new RegenerationTarget(RegenerationStatus.CLAIM_BLOCKED, group, List.of());
+            return CompletableFuture.completedFuture(new RegenerationTarget(RegenerationStatus.CLAIM_BLOCKED, group, List.of()));
         }
         long now = System.currentTimeMillis();
         var chunks = new ArrayList<MarkedChunk>();
@@ -79,8 +84,15 @@ public final class StructureService {
             chunks.add(new MarkedChunk(
                 group.world(), coordinate[0], coordinate[1], UUID.randomUUID(), now, groupId));
         }
-        markRegistry.markChunksDirect(chunks);
-        return new RegenerationTarget(RegenerationStatus.READY, group, List.copyOf(chunks));
+        return protectedMarks.markBatch(chunks, false).thenApply(outcome -> {
+            if (outcome.eligible().isEmpty()) {
+                return new RegenerationTarget(RegenerationStatus.CLAIM_BLOCKED, group, List.of());
+            }
+            if (markRegistry.getRegenerationQueue().isRunning()) {
+                return new RegenerationTarget(RegenerationStatus.REGEN_BUSY, group, List.of());
+            }
+            return new RegenerationTarget(RegenerationStatus.READY, group, outcome.eligible());
+        });
     }
 
     public boolean unblock(UUID groupId) {
@@ -102,14 +114,15 @@ public final class StructureService {
         return count;
     }
 
-    public List<Detection> detectAndRegister(World world, int blockX, int blockZ, UUID actor) {
-        List<Detection> results = new ArrayList<>();
+    public CompletableFuture<List<Detection>> detectAndRegister(World world, int blockX, int blockZ, UUID actor) {
+        List<CompletableFuture<Detection>> results = new ArrayList<>();
         for (var detected : structureDetector.detectAt(world, blockX, blockZ)) {
             structureRegistry.registerOrTouch(detected, world.getName(), actor).ifPresent(registered -> {
-                int newlyMarked = markRegistry.markChunksDirect(registered.chunks()).size();
-                results.add(new Detection(detected.structureId(), registered.newGroup(), newlyMarked));
+                results.add(protectedMarks.markBatch(registered.chunks(), false).thenApply(outcome ->
+                    new Detection(detected.structureId(), registered.newGroup(), outcome.added().size())));
             });
         }
-        return List.copyOf(results);
+        return CompletableFuture.allOf(results.toArray(CompletableFuture[]::new))
+            .thenApply(ignored -> results.stream().map(CompletableFuture::join).toList());
     }
 }

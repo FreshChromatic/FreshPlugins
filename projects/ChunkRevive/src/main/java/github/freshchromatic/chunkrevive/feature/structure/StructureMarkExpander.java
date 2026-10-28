@@ -30,8 +30,9 @@ public final class StructureMarkExpander {
         this.config = config;
     }
 
-    /** Returns the chunks that should end up marked; empty means "blocked by Residence". */
+    /** Returns the chunks that should end up marked; empty means blocked by land protection. */
     public List<MarkedChunk> expand(World world, int cx, int cz, UUID markedBy) {
+        if (landProtection.hasClaim(world, cx, cz)) return List.of();
         if (!config.structure.enabled || !config.structure.mark.expandToFullStructure) {
             return plainMark(world, cx, cz, markedBy);
         }

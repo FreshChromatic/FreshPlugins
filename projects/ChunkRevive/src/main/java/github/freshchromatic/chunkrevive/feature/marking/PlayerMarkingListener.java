@@ -61,12 +61,15 @@ public final class PlayerMarkingListener implements Listener {
         markService.followMode(player.getUniqueId()).ifPresent(mode -> {
             switch (mode) {
                 case MARK -> {
-                    var result = markService.mark(world, newCX, newCZ, player.getUniqueId());
-                    if (result == MarkService.MarkStatus.CLAIM_BLOCKED) {
-                        var mc = new github.freshchromatic.chunkrevive.feature.marking.MarkedChunk(world, newCX, newCZ, player.getUniqueId(), 0);
-                        player.sendMessage(messages.get().mark.residenceBlocked.withPlaceholders(
-                            Components.placeholder("cx_cz", mc.coordDisplay())));
-                    }
+                    markService.markAsync(world, newCX, newCZ, player.getUniqueId()).whenComplete((result, failure) -> {
+                        if (failure != null || result == MarkService.MarkStatus.CLAIM_BLOCKED) {
+                            Scheduler.runTask(plugin, () -> {
+                                var mc = new MarkedChunk(world, newCX, newCZ, player.getUniqueId(), 0);
+                                player.sendMessage(messages.get().mark.residenceBlocked.withPlaceholders(
+                                    Components.placeholder("cx_cz", mc.coordDisplay())));
+                            }, player);
+                        }
+                    });
                 }
                 case UNMARK -> {
                     if (markService.isMarked(world, newCX, newCZ)) {
@@ -104,15 +107,24 @@ public final class PlayerMarkingListener implements Listener {
         var currentConfig = config.get();
         if (currentConfig.structure.enabled && currentConfig.structure.detect.autoDetectOnWalk
             && structureService.canAutoDetect(world)) {
-            for (var detection : structureService.detectAndRegister(
-                    player.getWorld(), blockX, blockZ, player.getUniqueId())) {
-                if (currentConfig.structure.detect.notifyPlayerOnDetect
-                        && detection.newGroup() && detection.newlyMarked() > 0) {
-                    player.sendMessage(messages.get().structure.detected.withPlaceholders(
-                        Components.placeholder("structure_name", StructureRegistry.displayName(detection.structureId())),
-                        Components.placeholder("count", String.valueOf(detection.newlyMarked()))));
-                }
-            }
+            structureService.detectAndRegister(player.getWorld(), blockX, blockZ, player.getUniqueId())
+                .whenComplete((detections, failure) -> {
+                    if (failure != null) {
+                        plugin.getLogger().warning("Structure protection check failed: " + failure.getMessage());
+                        return;
+                    }
+                    Scheduler.runTask(plugin, () -> {
+                        if (!player.isOnline()) return;
+                        for (var detection : detections) {
+                            if (currentConfig.structure.detect.notifyPlayerOnDetect
+                                    && detection.newGroup() && detection.newlyMarked() > 0) {
+                                player.sendMessage(messages.get().structure.detected.withPlaceholders(
+                                    Components.placeholder("structure_name", StructureRegistry.displayName(detection.structureId())),
+                                    Components.placeholder("count", String.valueOf(detection.newlyMarked()))));
+                            }
+                        }
+                    }, player);
+                });
         }
     }
 

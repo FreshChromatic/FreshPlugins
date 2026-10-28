@@ -8,6 +8,7 @@ import github.freshchromatic.chunkrevive.api.model.ChunkKey;
 import github.freshchromatic.chunkrevive.api.model.RequestContext;
 import github.freshchromatic.chunkrevive.config.WorldAccessPolicy;
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
+import github.freshchromatic.chunkrevive.feature.marking.ProtectedMarkExecutor;
 import github.freshchromatic.chunkrevive.feature.marking.MarkResult;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
 import java.time.Instant;
@@ -27,9 +28,12 @@ final class DefaultMarkApi implements MarkApi {
     private final Plugin consumer;
     private final MarkRegistry registry;
     private final WorldAccessPolicy worlds;
+    private final ProtectedMarkExecutor protectedMarks;
 
-    DefaultMarkApi(Plugin plugin, Plugin consumer, MarkRegistry registry, WorldAccessPolicy worlds) {
+    DefaultMarkApi(Plugin plugin, Plugin consumer, MarkRegistry registry, WorldAccessPolicy worlds,
+                   ProtectedMarkExecutor protectedMarks) {
         this.plugin = plugin; this.consumer = consumer; this.registry = registry; this.worlds = worlds;
+        this.protectedMarks = protectedMarks;
     }
     @Override public Optional<MarkedChunkSnapshot> find(ChunkKey key) {
         return registry.getMarkedChunks().stream().filter(c -> c.world().equals(key.world()) && c.cx() == key.x() && c.cz() == key.z())
@@ -39,8 +43,8 @@ final class DefaultMarkApi implements MarkApi {
     @Override public CompletionStage<MarkChangeResult> mark(ChunkKey key, RequestContext context) {
         if (Bukkit.getWorld(key.world()) == null) return CompletableFuture.completedFuture(result(key, MarkChangeStatus.WORLD_NOT_FOUND));
         if (!worlds.isAllowed(key.world(), WorldAccessPolicy.Scope.MANUAL_MARK)) return CompletableFuture.completedFuture(result(key, MarkChangeStatus.WORLD_NOT_ALLOWED));
-        return onGlobal(() -> registry.markPersisted(key.world(), key.x(), key.z(), context.actor().orElse(SYSTEM_MARKER)))
-            .thenCompose(stage -> stage).thenCompose(status -> switch (status) {
+        return protectedMarks.mark(key.world(), key.x(), key.z(), context.actor().orElse(SYSTEM_MARKER), true)
+            .thenCompose(status -> switch (status) {
                 case SUCCESS -> onGlobal(() -> {
                     registry.refreshMarkedDisplay(key.world(), key.x(), key.z());
                     MarkChangeResult result = result(key, MarkChangeStatus.ADDED);

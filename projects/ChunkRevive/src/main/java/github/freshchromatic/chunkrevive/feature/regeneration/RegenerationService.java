@@ -2,6 +2,11 @@ package github.freshchromatic.chunkrevive.feature.regeneration;
 
 import github.freshchromatic.chunkrevive.config.Messages;
 import github.freshchromatic.chunkrevive.integration.protection.LandProtection;
+import github.freshchromatic.chunkrevive.integration.protection.ProtectionChecks;
+import github.freshchromatic.chunkrevive.api.integration.MaintenanceAction;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionBatchResult;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionDecision;
+import github.freshchromatic.chunkrevive.api.model.ChunkKey;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
 import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.freshlib.util.Components;
@@ -17,11 +22,16 @@ public final class RegenerationService {
 
     private Messages messages;
     private final LandProtection landProtection;
+    private final ProtectionChecks protectionChecks;
+    private final Plugin plugin;
     private final EndPodiumRestorer endPodiumRestorer;
 
-    public RegenerationService(Plugin plugin, Messages messages, LandProtection landProtection) {
+    public RegenerationService(Plugin plugin, Messages messages, LandProtection landProtection,
+                               ProtectionChecks protectionChecks) {
         this.messages = messages;
         this.landProtection = landProtection;
+        this.protectionChecks = protectionChecks;
+        this.plugin = plugin;
         this.endPodiumRestorer = new EndPodiumRestorer(plugin);
     }
 
@@ -66,6 +76,70 @@ public final class RegenerationService {
     public CompletableFuture<Void> regenChunks(Audience notifyTarget, java.util.Collection<MarkedChunk> chunks,
                                                 boolean silent, BooleanSupplier isCancelled, int[] extraContextBounds) {
         if (chunks.isEmpty()) return CompletableFuture.completedFuture(null);
+        var targets = java.util.List.copyOf(chunks);
+        var keys = targets.stream().map(chunk -> new ChunkKey(chunk.world(), chunk.cx(), chunk.cz())).toList();
+        var result = new CompletableFuture<Void>();
+        onGlobal(result, () -> {
+            long revision = protectionChecks.revision();
+            try {
+                protectionChecks.check(MaintenanceAction.REGENERATE, keys).whenComplete((decision, failure) -> {
+                    if (failure != null) {
+                        result.completeExceptionally(failure);
+                        return;
+                    }
+                    onGlobal(result, () -> {
+                        if (isCancelled.getAsBoolean()) {
+                            result.cancel(false);
+                        } else if (revision != protectionChecks.revision() || denied(decision, keys)) {
+                            result.completeExceptionally(new SkipChunkException("Land protection"));
+                        } else {
+                            try {
+                                BooleanSupplier cancelledOrChanged = () -> isCancelled.getAsBoolean()
+                                    || revision != protectionChecks.revision();
+                                regenerateChecked(notifyTarget, targets, silent, cancelledOrChanged, extraContextBounds)
+                                    .whenComplete((ignored, error) -> {
+                                        if (error == null) result.complete(null);
+                                        else result.completeExceptionally(error);
+                                    });
+                            } catch (Throwable error) {
+                                result.completeExceptionally(error);
+                            }
+                        }
+                    });
+                });
+            } catch (Throwable failure) {
+                result.completeExceptionally(failure);
+            }
+        });
+        return result;
+    }
+
+    private void onGlobal(CompletableFuture<?> result, Runnable task) {
+        try {
+            if (!plugin.isEnabled()) {
+                result.cancel(false);
+                return;
+            }
+            Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                try {
+                    task.run();
+                } catch (Throwable failure) {
+                    result.completeExceptionally(failure);
+                }
+            });
+        } catch (Throwable failure) {
+            result.completeExceptionally(failure);
+        }
+    }
+
+    private static boolean denied(ProtectionBatchResult result, java.util.List<ChunkKey> chunks) {
+        return result == null || chunks.stream().anyMatch(chunk ->
+            result.decisions().getOrDefault(chunk, ProtectionDecision.ABSTAIN) == ProtectionDecision.DENY);
+    }
+
+    private CompletableFuture<Void> regenerateChecked(Audience notifyTarget, java.util.Collection<MarkedChunk> chunks,
+                                                        boolean silent, BooleanSupplier isCancelled,
+                                                        int[] extraContextBounds) {
 
         MarkedChunk first = chunks.iterator().next();
         World world = Bukkit.getWorld(first.world());
@@ -81,7 +155,7 @@ public final class RegenerationService {
                 notifyTarget.sendMessage(messages.regen.residenceBlocked.withPlaceholders(
                     Components.placeholder("cx_cz", chunk.coordDisplay())));
                 var future = new CompletableFuture<Void>();
-                future.completeExceptionally(new SkipChunkException("Residence"));
+                future.completeExceptionally(new SkipChunkException("Land protection"));
                 return future;
             }
         }

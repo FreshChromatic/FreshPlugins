@@ -26,6 +26,8 @@ import org.bukkit.Bukkit;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Owns the live component graph and its reload/shutdown ordering. */
 final class PluginRuntime {
@@ -47,6 +49,7 @@ final class PluginRuntime {
     private final DeletionService deletionService;
     private final DefaultChunkReviveApi publicApi;
     private final ModrinthUpdateChecker updateChecker;
+    private final Map<String, Boolean> initialLandProviders;
 
     PluginRuntime(
             ChunkRevivePlugin plugin,
@@ -85,6 +88,7 @@ final class PluginRuntime {
         this.deletionService = deletionService;
         this.publicApi = publicApi;
         this.updateChecker = updateChecker;
+        this.initialLandProviders = providerEnablement(configManager.config());
     }
 
     PluginConfig config() {
@@ -106,6 +110,8 @@ final class PluginRuntime {
         }
 
         var config = configManager.config();
+        warnProviderRestart(config);
+        publicApi.protectionSettingsChanged();
         applyTerrainConfig(config);
         markRegistry.setConfig(config);
         diskChunkScanner.setConfig(config);
@@ -118,6 +124,8 @@ final class PluginRuntime {
 
         var config = configManager.config();
         var messages = messagesManager.config();
+        warnProviderRestart(config);
+        publicApi.protectionSettingsChanged();
         applyTerrainConfig(config);
 
         markRegistry.setConfig(config);
@@ -147,6 +155,17 @@ final class PluginRuntime {
         keepCommands.setMessages(messages);
         keepCommands.setConfig(config);
         updateChecker.start(config.updates);
+    }
+
+    private void warnProviderRestart(PluginConfig config) {
+        if (!initialLandProviders.equals(providerEnablement(config))) {
+            Logging.logger().warning("Land protection provider enablement changes require a server restart.");
+        }
+    }
+
+    private static Map<String, Boolean> providerEnablement(PluginConfig config) {
+        return PluginConfig.LandProtection.Providers.IDS.stream().collect(Collectors.toUnmodifiableMap(
+            id -> id, id -> config.landProtection.providers.byId(id).enabled));
     }
 
     void stop() {

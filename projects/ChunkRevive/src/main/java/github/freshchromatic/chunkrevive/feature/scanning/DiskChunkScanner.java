@@ -2,6 +2,10 @@ package github.freshchromatic.chunkrevive.feature.scanning;
 
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.integration.protection.LandProtection;
+import github.freshchromatic.chunkrevive.integration.protection.ProtectionChecks;
+import github.freshchromatic.chunkrevive.api.integration.MaintenanceAction;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionDecision;
+import github.freshchromatic.chunkrevive.api.model.ChunkKey;
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
 import github.freshchromatic.chunkrevive.feature.structure.StructureRegistry;
@@ -11,6 +15,8 @@ import github.freshchromatic.chunkrevive.nms.NmsPlatformLoader;
 import github.freshchromatic.chunkrevive.nms.WorldScanGateway;
 import github.freshchromatic.freshlib.util.Logging;
 import org.bukkit.World;
+import org.bukkit.Bukkit;
+import org.bukkit.plugin.Plugin;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -78,6 +84,8 @@ public final class DiskChunkScanner {
     private final MarkRegistry markRegistry;
     private final StructureRegistry structureRegistry;
     private final LandProtection landProtection;
+    private final ProtectionChecks protectionChecks;
+    private final Plugin plugin;
     private final WorldScanGateway worldScan;
     private PluginConfig config;
 
@@ -87,12 +95,15 @@ public final class DiskChunkScanner {
     private final Map<String, ScanState> activeScans = new java.util.concurrent.ConcurrentHashMap<>();
 
     public DiskChunkScanner(MarkRegistry markRegistry, StructureRegistry structureRegistry,
-                             LandProtection landProtection, PluginConfig config) {
+                             LandProtection landProtection, PluginConfig config,
+                             ProtectionChecks protectionChecks, Plugin plugin) {
         this.markRegistry = markRegistry;
         this.structureRegistry = structureRegistry;
         this.landProtection = landProtection;
         this.worldScan = NmsPlatformLoader.load().worldScan();
         this.config = config;
+        this.protectionChecks = protectionChecks;
+        this.plugin = plugin;
     }
 
     public void setConfig(PluginConfig config) {
@@ -176,7 +187,7 @@ public final class DiskChunkScanner {
 
     private ScanResult doScan(World world, ScanArea area, BiomeFilter biomeFilter, ProgressListener listener, ScanState state) throws IOException {
         ChunkStage minStatus = parseStatus(config.scan.minPersistedStatus);
-        boolean checkClaims = config.scan.checkResidenceClaims && landProtection.isEnabled();
+        boolean checkClaims = config.landProtection.scanClaims;
         // Purely procedural (no disk I/O of its own); read-only and safe to share across region workers.
         BiomeMatcher biomeMatcher = biomeFilter != null
             ? new BiomeMatcher(world, config.biome.heightmapTypeEnum())
@@ -216,8 +227,13 @@ public final class DiskChunkScanner {
             for (Future<?> f : futures) {
                 try {
                     f.get();
-                } catch (ExecutionException | InterruptedException e) {
-                    Logging.logger().warning("[DiskChunkScanner] Region task failed: " + e.getMessage());
+                } catch (ExecutionException e) {
+                    state.cancelled.set(true);
+                    throw new IllegalStateException("Region scan failed", e.getCause());
+                } catch (InterruptedException e) {
+                    state.cancelled.set(true);
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Region scan interrupted", e);
                 }
                 if (listener != null) {
                     long now = System.currentTimeMillis();
@@ -302,13 +318,69 @@ public final class DiskChunkScanner {
             return;
         }
 
-        if (!toMark.isEmpty()) {
+        if (checkClaims && !toMark.isEmpty()) {
+            int before = toMark.size();
+            var outcome = markExternalUnclaimed(toMark, cancelled);
+            chunksSkippedClaimed.addAndGet(before - outcome.eligible());
+            chunksMarkedTotal.addAndGet(outcome.added());
+            chunksSkippedExisting.addAndGet(outcome.eligible() - outcome.added());
+        } else if (!toMark.isEmpty()) {
             int before = toMark.size();
             List<MarkedChunk> newlyAdded = markRegistry.markChunksBatch(toMark);
             chunksMarkedTotal.addAndGet(newlyAdded.size());
             chunksSkippedExisting.addAndGet(before - newlyAdded.size());
         }
     }
+
+    private record MarkOutcome(int eligible, int added) {}
+
+    private MarkOutcome markExternalUnclaimed(List<MarkedChunk> chunks, AtomicBoolean cancelled) {
+        var result = new CompletableFuture<MarkOutcome>();
+        var keys = chunks.stream().map(chunk -> new ChunkKey(chunk.world(), chunk.cx(), chunk.cz())).toList();
+        try {
+            Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                long revision = protectionChecks.revision();
+                try {
+                    protectionChecks.checkExternal(MaintenanceAction.MARK, keys).whenComplete((decision, failure) -> {
+                        if (failure != null) {
+                            result.completeExceptionally(failure);
+                        } else {
+                            try {
+                                Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                                    try {
+                                        if (result.isDone() || cancelled.get()) {
+                                            result.completeExceptionally(new IllegalStateException("Scan cancelled"));
+                                            return;
+                                        }
+                                        if (decision == null || revision != protectionChecks.revision()) {
+                                            throw new IllegalStateException("Protection changed during scan");
+                                        }
+                                        var eligible = chunks.stream().filter(chunk -> decision.decisions().getOrDefault(
+                                            new ChunkKey(chunk.world(), chunk.cx(), chunk.cz()), ProtectionDecision.ABSTAIN)
+                                            != ProtectionDecision.DENY).toList();
+                                        result.complete(new MarkOutcome(eligible.size(),
+                                            markRegistry.markChunksBatch(eligible).size()));
+                                    } catch (Throwable error) {
+                                        result.completeExceptionally(error);
+                                    }
+                                });
+                            } catch (Throwable error) {
+                                result.completeExceptionally(error);
+                            }
+                        }
+                    });
+                } catch (Throwable failure) {
+                    result.completeExceptionally(failure);
+                }
+            });
+            return result.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception failure) {
+            result.completeExceptionally(failure);
+            if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+            throw new IllegalStateException("External protection check failed during scan", failure);
+        }
+    }
+
     private static List<int[]> allChunksIn(int minCx, int maxCx, int minCz, int maxCz) {
         List<int[]> list = new ArrayList<>();
         for (int x = minCx; x <= maxCx; x++) {

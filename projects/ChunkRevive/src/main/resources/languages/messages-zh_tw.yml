@@ -9,7 +9,7 @@ mark:
     success: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已標記區塊 <cx_cz>。
     already: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>區塊 <cx_cz> 已在標記列表中。
     residence-blocked: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>區塊 <cx_cz>
-        位於 Residence 保護範圍內，無法標記。
+        位於 領地保護範圍內，無法標記。
     follow-on: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FBFF8B>已開啟追蹤標記模式，走過的區塊將自動標記。
     follow-off: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#8BFF7B>已關閉追蹤標記模式。
 unmark:
@@ -29,7 +29,7 @@ regen:
         個區塊（耗時 <#FBFF8B><elapsed><#8BFF7B> / <elapsed_ms> ms）。
     none-marked: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>目前沒有標記中的區塊。
     residence-blocked: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>區塊 <cx_cz>
-        位於 Residence 保護範圍內，跳過再生。
+        位於 領地保護範圍內，跳過再生。
     confirm-required: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FFAA00>即將批量再生約 <#FBFF8B><count><#FFAA00>
         個區塊，請於 <timeout> 秒內輸入「<#FBFF8B>/cr regen all <scope> --confirm<#FFAA00>」確認執行。
     world-not-allowed: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>世界 <#FBFF8B><world><#FF6048>
@@ -78,7 +78,7 @@ deletion:
         <#FBFF8B><world><#FFAA00> 的實體 region <#FBFF8B>r.<rx>.<rz><#FFAA00>（最多 1024
         個區塊）。請於 <timeout> 秒內輸入「<#FBFF8B><command> --confirm<#FFAA00>」確認。
     protected-region: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#FF6048>region r.<rx>.<rz>
-        含有 Residence 保護區塊，拒絕清理。
+        含有 領地保護區塊，拒絕清理。
     no-jobs: <#7A7A7A>[<#0094D5>ChunkRevive<#7A7A7A>] <#7A7A7A>目前沒有等待或執行中的刪除／清理工作。
 list:
     title: 標記區塊列表
@@ -395,7 +395,7 @@ text:
     structure-scheduled: 排程中
     structure-refresh-in-days: '%s 天後刷新'
     structure-not-found: 找不到此結構群組。
-    structure-claim-blocked: 範圍內含 Residence 領地，已中止強制刷新。
+    structure-claim-blocked: 範圍內含 受保護領地，已中止強制刷新。
     structure-unblocked: 已解除該結構的保護狀態。
     structure-blocked: 已將該結構設為保護狀態。
     structure-reset: 已重設該結構的狀態與刷新計時器。
@@ -419,7 +419,7 @@ text:
     reset-no-deletable-world: 世界 %s 沒有可刪除的已標記區塊。
     reset-delete-marked-confirm: 即將排程刪除 %s 個 ChunkRevive 已標記區塊（不是世界中的所有區塊）。請於 %s 秒內輸入「%s」確認。
     reset-structure-empty: 此結構已沒有已標記區塊。
-    reset-structure-claim-blocked: 此結構範圍內含有 Residence 保護區塊，拒絕刪除整個結構。
+    reset-structure-claim-blocked: 此結構範圍內含有 領地保護區塊，拒絕刪除整個結構。
     reset-structure-confirm: 即將刪除已標記結構 %s 的 %s 個區塊。請於 %s 秒內輸入「/cr delete here struct
         --confirm」確認。
     regen-structure-confirm: 即將重新生成已標記結構的 %s 個區塊。請於 %s 秒內輸入「/cr regen here struct --confirm」確認。
@@ -468,7 +468,7 @@ text:
     status-database: 資料庫類型 (Database Type)
     status-marked-chunks: 已標記區塊數量 (Marked Chunks)
     status-marked-structures: 已標記結構數量 (Marked Structures)
-    status-residence-blocked: 遭領地阻止再生區塊 (Residence Blocked Chunks)
+    status-residence-blocked: 遭領地阻止再生區塊 (Protected Chunks)
     status-version: 伺服器版本 (Version)
     status-os: 作業系統
     status-gen-thread-value: '%s / %s (配置: %s)'

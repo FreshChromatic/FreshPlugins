@@ -19,6 +19,7 @@ final class ChunkReviveConfigManager extends ConfigurateConfigManager<PluginConf
 
     @Override
     protected void mergeDefaults(ConfigurationNode loaded, ConfigurationNode defaults) {
+        migrateLandProtection(loaded);
         ConfigurationNode tracked = trackedStructures(loaded);
         boolean explicitlyConfigured = !tracked.virtual();
         Object configuredValue = explicitlyConfigured ? tracked.raw() : null;
@@ -28,6 +29,16 @@ final class ChunkReviveConfigManager extends ConfigurateConfigManager<PluginConf
         if (explicitlyConfigured) {
             trackedStructures(loaded).raw(configuredValue);
         }
+    }
+
+    private static void migrateLandProtection(ConfigurationNode root) {
+        var oldScan = root.node("scan", "check-residence-claims");
+        var newScan = root.node("land-protection", "scan-claims");
+        if (newScan.virtual() && !oldScan.virtual()) newScan.raw(oldScan.raw());
+
+        var oldPolicy = root.node("structure", "residence", "on-partial-claim");
+        var newPolicy = root.node("land-protection", "default-structure-policy");
+        if (newPolicy.virtual() && !oldPolicy.virtual()) newPolicy.raw(oldPolicy.raw());
     }
 
     @Override

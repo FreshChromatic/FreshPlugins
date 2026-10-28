@@ -96,9 +96,9 @@ public final class ChunkReviveCommand {
             plugin, markRegistry, scanner, deletionService, messages);
         this.maintenanceCommands = new ResetCommands(
             plugin, markRegistry, deletionService,
-            confirmationManager, this::regenerateStructure, resetService, messages);
+            confirmationManager, this::regenerateStructure, resetService, chunkScanService, messages);
         this.structureCommands = new StructureCommands(
-            structureService, maintenanceCommands::bulkRegenerate, messages);
+            plugin, structureService, maintenanceCommands::bulkRegenerate, messages);
         this.markCommands = new MarkCommands(plugin, markService, messages);
         this.scanCommands = new ScanCommands(
             plugin, worldAccessPolicy, chunkScanService, maintenanceCommands::bulkRegenerate,

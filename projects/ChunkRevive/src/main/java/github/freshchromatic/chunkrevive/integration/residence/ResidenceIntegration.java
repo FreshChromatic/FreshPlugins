@@ -97,8 +97,9 @@ public final class ResidenceIntegration implements LandProtection, ProtectionInt
         return java.util.concurrent.CompletableFuture.completedFuture(new ProtectionBatchResult(decisions, reasons));
     }
 
-    public void registerProvider(IntegrationApi api, Plugin owner) {
-        registration = api.registerProtectionProvider(owner, this);
+    @Override
+    public void registerProviders(IntegrationApi api) {
+        registration = api.registerProtectionProvider(Bukkit.getPluginManager().getPlugin("Residence"), this);
     }
 
     private void notifyClaimCreated(String world, int minCx, int maxCx, int minCz, int maxCz) {

@@ -10,6 +10,7 @@ import github.freshchromatic.chunkrevive.feature.reset.DeletionService;
 import github.freshchromatic.chunkrevive.feature.reset.ResetMethod;
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
+import github.freshchromatic.chunkrevive.feature.scanning.ChunkScanService;
 import github.freshchromatic.chunkrevive.feature.structure.StructureRegistry;
 import github.freshchromatic.freshlib.command.Commander;
 import github.freshchromatic.freshlib.command.PlayerCommander;
@@ -36,6 +37,7 @@ public final class ResetCommands {
     private final ConfirmationManager confirmationManager;
     private final BiConsumer<Commander, UUID> regenerateStructure;
     private final ResetService resetService;
+    private final ChunkScanService chunkScanService;
     private Messages messages;
 
     public ResetCommands(
@@ -45,6 +47,7 @@ public final class ResetCommands {
             ConfirmationManager confirmationManager,
             BiConsumer<Commander, UUID> regenerateStructure,
             ResetService resetService,
+            ChunkScanService chunkScanService,
             Messages messages) {
         this.plugin = plugin;
         this.markRegistry = markRegistry;
@@ -52,6 +55,7 @@ public final class ResetCommands {
         this.confirmationManager = confirmationManager;
         this.regenerateStructure = regenerateStructure;
         this.resetService = resetService;
+        this.chunkScanService = chunkScanService;
         this.messages = messages;
     }
 
@@ -372,7 +376,17 @@ public final class ResetCommands {
         }
 
         if (markBeforeExecute) {
-            markRegistry.markChunksDirect(List.copyOf(targets));
+            chunkScanService.markDirect(List.copyOf(targets)).whenComplete((outcome, failure) -> {
+                if (failure != null) {
+                    plugin.getLogger().warning("Biome protection check failed: " + failure.getMessage());
+                    sender.sendMessage(messages.regen.noneMarked.asComponent());
+                } else if (outcome.eligible().isEmpty()) {
+                    sender.sendMessage(messages.regen.noneMarked.asComponent());
+                } else {
+                    bulkReset(sender, outcome.eligible());
+                }
+            });
+            return;
         }
         bulkReset(sender, targets);
     }

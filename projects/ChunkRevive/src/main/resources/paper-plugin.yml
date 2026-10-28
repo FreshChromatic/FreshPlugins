@@ -24,6 +24,43 @@ dependencies:
       required: false
       join-classpath: true
 
+    GriefPrevention:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    GriefDefender:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Towny:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    WorldGuard:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Dominion:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Homestead:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    CCP:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    LandClaimPlugin:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    Bonfire:
+      load: BEFORE
+      required: false
+      join-classpath: true
+
 permissions:
   chunkrevive.admin:
     description: Access to all /cr admin commands

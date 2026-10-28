@@ -63,9 +63,8 @@ public final class StructureRegistry {
             .toList();
     }
 
-    /** Resolves the structure range to its effective (Residence-aware) chunk set, per structure.residence.on-partial-claim. */
     public List<int[]> resolveEffectiveChunks(String world, int minCx, int maxCx, int minCz, int maxCz) {
-        return landProtection.resolveEffectiveChunks(world, minCx, maxCx, minCz, maxCz, config.structure.residence.onPartialClaimEnum());
+        return landProtection.resolveEffectiveChunks(world, minCx, maxCx, minCz, maxCz, config.landProtection.defaultPolicy());
     }
 
     /** Finds an existing group covering the exact same range, or creates and persists a new one. */

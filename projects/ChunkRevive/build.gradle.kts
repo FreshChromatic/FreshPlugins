@@ -10,6 +10,8 @@ version = "26-Release.3"
 
 repositories {
     mavenCentral()
+    maven(url = "https://repo.glaremasters.me/repository/towny/")
+    maven(url = "https://maven.enginehub.org/repo/")
     maven(url = "https://repo.papermc.io/repository/maven-public/")
     maven(url = "https://jitpack.io/")
     maven(url = "https://repo.codemc.io/repository/maven-releases/")
@@ -39,6 +41,20 @@ dependencies {
     // (bumped to beta.15 there) — declaring our own copy here causes a
     // loader-constraint LinkageError when crossing into FreshLib's cloud-minecraft-extras.
 
+    compileOnly("com.github.TechFortress:GriefPrevention:16.18")
+    compileOnly(files("libs/GriefDefenderAPI-2.1.0-SNAPSHOT.jar"))
+    compileOnly("com.palmergames.bukkit.towny:towny:0.103.2.0") { isTransitive = false }
+    compileOnly("com.sk89q.worldguard:worldguard-core:7.0.13") { isTransitive = false }
+    compileOnly("com.sk89q.worldedit:worldedit-core:7.3.9") { isTransitive = false }
+    compileOnly("com.sk89q.worldedit:worldedit-bukkit:7.3.9") { isTransitive = false }
+    compileOnly(files(
+        "libs/Dominion-4.9.8-release-lite.jar",
+        "libs/homestead-6.0.0.1.jar",
+        "libs/ChunkClaimPlugin-0.8.0.jar",
+        "libs/LandClaimPlugin-3.4.0.jar",
+        "libs/Bonfire-1.6.1.jar"
+    ))
+
     // Residence soft-dependency
     compileOnly(files("libs/Residence6.0.1.6.jar"))
 
@@ -50,6 +66,11 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.0.3")
     testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    testImplementation(files(
+        "libs/Dominion-4.9.8-release-lite.jar",
+        "libs/Bonfire-1.6.1.jar",
+        "libs/homestead-6.0.0.1.jar"
+    ))
     testImplementation(project(":libraries:FreshLib"))
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.0.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.3")
@@ -136,6 +157,15 @@ tasks {
 
     test {
         useJUnitPlatform()
+        javaLauncher.set(project.extensions.getByType<JavaToolchainService>().launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(25))
+        })
+    }
+
+    compileTestJava {
+        javaCompiler.set(project.extensions.getByType<JavaToolchainService>().compilerFor {
+            languageVersion.set(JavaLanguageVersion.of(25))
+        })
     }
 
     shadowJar {
@@ -159,6 +189,9 @@ tasks {
     }
 
     compileJava {
+        javaCompiler.set(project.extensions.getByType<JavaToolchainService>().compilerFor {
+            languageVersion.set(JavaLanguageVersion.of(25))
+        })
         options.encoding = Charsets.UTF_8.name()
         options.release = 21
         options.compilerArgs.add("-parameters")

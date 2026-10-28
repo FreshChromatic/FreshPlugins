@@ -9,8 +9,10 @@ import github.freshchromatic.chunkrevive.feature.structure.StructureRegistry;
 import github.freshchromatic.freshlib.command.Commander;
 import github.freshchromatic.freshlib.command.PlayerCommander;
 import github.freshchromatic.freshlib.util.Components;
+import github.freshchromatic.freshlib.scheduler.Scheduler;
 import net.kyori.adventure.text.Component;
 import org.incendo.cloud.context.CommandContext;
+import org.bukkit.plugin.Plugin;
 
 import java.util.Collection;
 import java.util.Optional;
@@ -22,13 +24,16 @@ public final class StructureCommands {
     private static final int PAGE_SIZE = 8;
 
     private final StructureService structureService;
+    private final Plugin plugin;
     private final BiConsumer<Commander, Collection<MarkedChunk>> bulkReset;
     private Messages messages;
 
     public StructureCommands(
+            Plugin plugin,
             StructureService structureService,
             BiConsumer<Commander, Collection<MarkedChunk>> bulkReset,
             Messages messages) {
+        this.plugin = plugin;
         this.structureService = structureService;
         this.bulkReset = bulkReset;
         this.messages = messages;
@@ -51,18 +56,22 @@ public final class StructureCommands {
         }
 
         var location = player.getLocation();
-        var detections = structureService.detectAndRegister(
-            player.getWorld(), location.getBlockX(), location.getBlockZ(), player.getUniqueId());
-        if (detections.isEmpty()) {
-            sender.sendMessage(messages.structure.checkOutside.asComponent());
-            return;
-        }
-
-        for (var detection : detections) {
-            sender.sendMessage(messages.structure.detected.withPlaceholders(
-                Components.placeholder("structure_name", StructureRegistry.displayName(detection.structureId())),
-                Components.placeholder("count", String.valueOf(detection.newlyMarked()))));
-        }
+        structureService.detectAndRegister(player.getWorld(), location.getBlockX(), location.getBlockZ(), player.getUniqueId())
+            .whenComplete((detections, failure) -> Scheduler.runTask(plugin, () -> {
+                if (!player.isOnline()) return;
+                if (failure != null) {
+                    plugin.getLogger().warning("Structure protection check failed: " + failure.getMessage());
+                    sender.sendMessage(Component.text(messages.text("structure-claim-blocked")).color(AdminTuiBuilder.SEVERE));
+                } else if (detections.isEmpty()) {
+                    sender.sendMessage(messages.structure.checkOutside.asComponent());
+                } else {
+                    for (var detection : detections) {
+                        sender.sendMessage(messages.structure.detected.withPlaceholders(
+                            Components.placeholder("structure_name", StructureRegistry.displayName(detection.structureId())),
+                            Components.placeholder("count", String.valueOf(detection.newlyMarked()))));
+                    }
+                }
+            }, player));
     }
 
     public void check(CommandContext<PlayerCommander> ctx) {
@@ -130,7 +139,17 @@ public final class StructureCommands {
 
     /** Shared by `/cr struct refresh <groupId>` and `/cr regen structure`. */
     public void regenerate(Commander sender, UUID groupId) {
-        var target = structureService.prepareRegeneration(groupId);
+        structureService.prepareRegeneration(groupId).whenComplete((target, failure) -> {
+            if (failure != null) {
+                plugin.getLogger().warning("Structure protection check failed: " + failure.getMessage());
+                sender.sendMessage(Component.text(messages.text("structure-claim-blocked")).color(AdminTuiBuilder.SEVERE));
+                return;
+            }
+            finishRegeneration(sender, target);
+        });
+    }
+
+    private void finishRegeneration(Commander sender, StructureService.RegenerationTarget target) {
         if (target.status() != StructureService.RegenerationStatus.READY) {
             sender.sendMessage(switch (target.status()) {
                 case REGEN_BUSY -> Component.text(messages.text("regen-busy")).color(AdminTuiBuilder.SEVERE);

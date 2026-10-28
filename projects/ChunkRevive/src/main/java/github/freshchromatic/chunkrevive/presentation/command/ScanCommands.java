@@ -294,11 +294,20 @@ public final class ScanCommands {
                     .color(AdminTuiBuilder.SEVERE));
                 return;
             }
-            var newlyAdded = chunkScanService.markCandidates(toMark);
-            String truncated = detected.result().truncated()
-                ? messages.text("biome-mark-truncated", cfg.biome.regen.floodFillMaxChunks) : "";
-            sender.sendMessage(Component.text(messages.text("biome-marked", detected.biomeId(), newlyAdded.size(), toMark.size(), truncated))
-                .color(AdminTuiBuilder.NORMAL));
+            chunkScanService.markCandidates(toMark).whenComplete((outcome, failure) ->
+                Scheduler.runTask(plugin, () -> {
+                    if (!sender.player().isOnline()) return;
+                    if (failure != null) {
+                        plugin.getLogger().warning("Biome protection check failed: " + failure.getMessage());
+                        sender.sendMessage(Component.text(messages.text("biome-no-markable-chunks", detected.biomeId()))
+                            .color(AdminTuiBuilder.SEVERE));
+                        return;
+                    }
+                    String truncated = detected.result().truncated()
+                        ? messages.text("biome-mark-truncated", cfg.biome.regen.floodFillMaxChunks) : "";
+                    sender.sendMessage(Component.text(messages.text("biome-marked", detected.biomeId(),
+                        outcome.added().size(), outcome.eligible().size(), truncated)).color(AdminTuiBuilder.NORMAL));
+                }, sender.player()));
         });
     }
 
@@ -409,11 +418,19 @@ public final class ScanCommands {
     }
 
     private void executeBiomeRegeneration(PlayerCommander sender, BiomeSelection selection) {
-        sender.sendMessage(Component.text(messages.text(
-            "biome-regen-start", selection.biomeId(), selection.chunks().size()))
-            .color(AdminTuiBuilder.NORMAL));
-        chunkScanService.markDirect(selection.chunks());
-        bulkReset.accept(sender, selection.chunks());
+        chunkScanService.markDirect(selection.chunks()).whenComplete((outcome, failure) ->
+            Scheduler.runTask(plugin, () -> {
+                if (!sender.player().isOnline()) return;
+                if (failure != null || outcome.eligible().isEmpty()) {
+                    if (failure != null) plugin.getLogger().warning("Biome protection check failed: " + failure.getMessage());
+                    sender.sendMessage(Component.text(messages.text("biome-no-regenerable-chunks", selection.biomeId()))
+                        .color(AdminTuiBuilder.SEVERE));
+                    return;
+                }
+                sender.sendMessage(Component.text(messages.text(
+                    "biome-regen-start", selection.biomeId(), outcome.eligible().size())).color(AdminTuiBuilder.NORMAL));
+                bulkReset.accept(sender, outcome.eligible());
+            }, sender.player()));
     }
 
     public void resetHereBiome(CommandContext<PlayerCommander> ctx, boolean confirmed,

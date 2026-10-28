@@ -7,6 +7,8 @@ import org.bukkit.plugin.Plugin;
 public interface ProtectionIntegration {
     LandProtection landProtection();
 
+    default void registerProviders(github.freshchromatic.chunkrevive.api.integration.IntegrationApi api) {}
+
     default void registerListeners(Plugin plugin, MarkService markService) {
         // Null-object integrations have no listeners.
     }

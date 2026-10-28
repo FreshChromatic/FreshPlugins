@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /** Application use cases for marked chunks, shared by commands and listeners. */
 public final class MarkService {
@@ -15,21 +16,24 @@ public final class MarkService {
 
     private final MarkRegistry markRegistry;
     private final WorldAccessPolicy worldAccessPolicy;
+    private final ProtectedMarkExecutor protectedMarks;
 
-    public MarkService(MarkRegistry markRegistry, WorldAccessPolicy worldAccessPolicy) {
+    public MarkService(MarkRegistry markRegistry, WorldAccessPolicy worldAccessPolicy,
+                       ProtectedMarkExecutor protectedMarks) {
         this.markRegistry = markRegistry;
         this.worldAccessPolicy = worldAccessPolicy;
+        this.protectedMarks = protectedMarks;
     }
 
-    public MarkStatus mark(String world, int cx, int cz, UUID actor) {
+    public CompletableFuture<MarkStatus> markAsync(String world, int cx, int cz, UUID actor) {
         if (!worldAccessPolicy.isAllowed(world, WorldAccessPolicy.Scope.MANUAL_MARK)) {
-            return MarkStatus.WORLD_NOT_ALLOWED;
+            return CompletableFuture.completedFuture(MarkStatus.WORLD_NOT_ALLOWED);
         }
-        return switch (markRegistry.mark(world, cx, cz, actor)) {
+        return protectedMarks.mark(world, cx, cz, actor, false).thenApply(status -> switch (status) {
             case SUCCESS -> MarkStatus.SUCCESS;
             case ALREADY_MARKED -> MarkStatus.ALREADY_MARKED;
             case RESIDENCE_BLOCKED -> MarkStatus.CLAIM_BLOCKED;
-        };
+        });
     }
 
     public boolean unmark(String world, int cx, int cz, UUID actor) {
