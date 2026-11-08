@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.eclipse.jdt:org.eclipse.jdt.core:3.43.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    inputs.file('../java-format.properties')
+}
+
+def workspace = projectDir.parentFile.parentFile
+tasks.register('formatJava', JavaExec) {
+    group = 'formatting'
+    description = 'Format project Java sources using the project Eclipse JDT profile.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'github.freshchromatic.freshplugins.formatting.JavaFormatter'
+    workingDir workspace
+    args new File(workspace, 'tools/java-format.properties').absolutePath
+    if (project.hasProperty('checkFormat')) {
+        args '--check'
+    }
+    def sources = fileTree(new File(workspace, 'projects')) {
+        include '**/*.java'
+        exclude '**/build/**', '**/references/**'
+    } + fileTree(new File(workspace, 'libraries')) {
+        include '**/*.java'
+        exclude '**/build/**', '**/references/**'
+    } + fileTree(new File(workspace, 'tools')) {
+        include '**/*.java'
+        exclude '**/build/**'
+    }
+    def sourceList = layout.buildDirectory.file('format-sources.txt')
+    doFirst {
+        def manifest = sourceList.get().asFile
+        manifest.parentFile.mkdirs()
+        manifest.setText(sources.files.sort { it.absolutePath }
+            .collect { workspace.toPath().relativize(it.toPath()).toString() }.join('\n'), 'UTF-8')
+        args '--files-from', manifest.absolutePath
+    }
+}

@@ -96,7 +96,6 @@ public class FoliaScheduler implements PlatformScheduler {
         }
     }
 
-
     @Override
     public void executeOrScheduleSync(Plugin plugin, Runnable task, Entity entity) {
         executeOrScheduleSync(plugin, task, null, entity);
@@ -108,13 +107,14 @@ public class FoliaScheduler implements PlatformScheduler {
             task.run();
         } else {
             try {
-                entity.getScheduler().run(plugin, st -> task.run(), retired);
+                if (entity.getScheduler().run(plugin, st -> task.run(), retired) == null) {
+                    task.run();
+                }
             } catch (IllegalPluginAccessException e) {
                 task.run();
             }
         }
     }
-
 
     @Override
     public void executeOrScheduleSync(Plugin plugin, Runnable task, Location location) {
@@ -128,7 +128,6 @@ public class FoliaScheduler implements PlatformScheduler {
             }
         }
     }
-
 
     @Override
     public void executeOrScheduleSync(Plugin plugin, Runnable task, Chunk chunk) {
@@ -148,7 +147,6 @@ public class FoliaScheduler implements PlatformScheduler {
         }
     }
 
-
     @Override
     public FoliaScheduledTask runTask(Plugin plugin, Runnable task, Entity entity) {
         return runTask(plugin, task, null, entity);
@@ -166,17 +164,21 @@ public class FoliaScheduler implements PlatformScheduler {
 
     @Override
     public FoliaScheduledTask runTask(Plugin plugin, Runnable task, Runnable retired, Entity entity) {
-        return new FoliaScheduledTask(entity.getScheduler().run(plugin, st -> task.run(), retired));
+        return FoliaScheduledTask.forEntity(plugin, entity.getScheduler().run(plugin, st -> task.run(), retired));
     }
 
     @Override
     public FoliaScheduledTask runTaskLater(Plugin plugin, Runnable task, Runnable retired, long delay, Entity entity) {
-        return delay <= 0 ? runTask(plugin, task, retired, entity) : new FoliaScheduledTask(entity.getScheduler().runDelayed(plugin, st -> task.run(), retired, delay));
+        return delay <= 0 ? runTask(plugin, task, retired, entity)
+            : FoliaScheduledTask.forEntity(plugin, entity.getScheduler().runDelayed(plugin, st -> task.run(), retired,
+                delay));
     }
 
     @Override
-    public FoliaScheduledTask runTaskTimer(Plugin plugin, Runnable task, Runnable retired, long delay, long period, Entity entity) {
-        return new FoliaScheduledTask(entity.getScheduler().runAtFixedRate(plugin, st -> task.run(), retired, Math.max(1, delay), period));
+    public FoliaScheduledTask runTaskTimer(Plugin plugin, Runnable task, Runnable retired, long delay, long period,
+        Entity entity) {
+        return FoliaScheduledTask.forEntity(plugin, entity.getScheduler().runAtFixedRate(plugin, st -> task.run(),
+            retired, Math.max(1, delay), period));
     }
 
     @Override
@@ -186,12 +188,14 @@ public class FoliaScheduler implements PlatformScheduler {
 
     @Override
     public FoliaScheduledTask runTaskLater(Plugin plugin, Runnable task, long delay, Location location) {
-        return delay <= 0 ? runTask(plugin, task, location) : new FoliaScheduledTask(Bukkit.getRegionScheduler().runDelayed(plugin, location, st -> task.run(), delay));
+        return delay <= 0 ? runTask(plugin, task, location)
+            : new FoliaScheduledTask(Bukkit.getRegionScheduler().runDelayed(plugin, location, st -> task.run(), delay));
     }
 
     @Override
     public FoliaScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period, Location location) {
-        return new FoliaScheduledTask(Bukkit.getRegionScheduler().runAtFixedRate(plugin, location, st -> task.run(), Math.max(1, delay), period));
+        return new FoliaScheduledTask(Bukkit.getRegionScheduler().runAtFixedRate(plugin, location, st -> task.run(),
+            Math.max(1, delay), period));
     }
 
     @Override
@@ -215,13 +219,18 @@ public class FoliaScheduler implements PlatformScheduler {
     }
 
     @Override
-    public FoliaScheduledTask runTaskLater(Plugin plugin, Runnable task, long delay, World world, int chunkX, int chunkZ) {
-        return delay <= 0 ? runTask(plugin, task, world, chunkX, chunkZ) : new FoliaScheduledTask(Bukkit.getRegionScheduler().runDelayed(plugin, world, chunkX, chunkZ, st -> task.run(), delay));
+    public FoliaScheduledTask runTaskLater(Plugin plugin, Runnable task, long delay, World world, int chunkX,
+        int chunkZ) {
+        return delay <= 0 ? runTask(plugin, task, world, chunkX, chunkZ)
+            : new FoliaScheduledTask(Bukkit.getRegionScheduler().runDelayed(plugin, world, chunkX, chunkZ,
+                st -> task.run(), delay));
     }
 
     @Override
-    public FoliaScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period, World world, int chunkX, int chunkZ) {
-        return new FoliaScheduledTask(Bukkit.getRegionScheduler().runAtFixedRate(plugin, world, chunkX, chunkZ, st -> task.run(), Math.max(1, delay), period));
+    public FoliaScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period, World world,
+        int chunkX, int chunkZ) {
+        return new FoliaScheduledTask(Bukkit.getRegionScheduler().runAtFixedRate(plugin, world, chunkX, chunkZ,
+            st -> task.run(), Math.max(1, delay), period));
     }
 
     @Override
@@ -231,12 +240,14 @@ public class FoliaScheduler implements PlatformScheduler {
 
     @Override
     public FoliaScheduledTask runTaskLater(Plugin plugin, Runnable task, long delay) {
-        return delay <= 0 ? runTask(plugin, task) : new FoliaScheduledTask(Bukkit.getGlobalRegionScheduler().runDelayed(plugin, st -> task.run(), delay));
+        return delay <= 0 ? runTask(plugin, task)
+            : new FoliaScheduledTask(Bukkit.getGlobalRegionScheduler().runDelayed(plugin, st -> task.run(), delay));
     }
 
     @Override
     public FoliaScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period) {
-        return new FoliaScheduledTask(Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, st -> task.run(), Math.max(1, delay), period));
+        return new FoliaScheduledTask(Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, st -> task.run(),
+            Math.max(1, delay), period));
     }
 
     @Override
@@ -246,12 +257,15 @@ public class FoliaScheduler implements PlatformScheduler {
 
     @Override
     public FoliaScheduledTask runTaskLaterAsynchronously(Plugin plugin, Runnable task, long delay) {
-        return delay <= 0 ? runTaskAsynchronously(plugin, task) : new FoliaScheduledTask(Bukkit.getAsyncScheduler().runDelayed(plugin, st -> task.run(), delay * 50, TimeUnit.MILLISECONDS));
+        return delay <= 0 ? runTaskAsynchronously(plugin, task)
+            : new FoliaScheduledTask(Bukkit.getAsyncScheduler().runDelayed(plugin, st -> task.run(), delay * 50,
+                TimeUnit.MILLISECONDS));
     }
 
     @Override
     public FoliaScheduledTask runTaskTimerAsynchronously(Plugin plugin, Runnable task, long delay, long period) {
-        return new FoliaScheduledTask(Bukkit.getAsyncScheduler().runAtFixedRate(plugin, st -> task.run(), Math.max(1, delay * 50), period * 50, TimeUnit.MILLISECONDS));
+        return new FoliaScheduledTask(Bukkit.getAsyncScheduler().runAtFixedRate(plugin, st -> task.run(), Math.max(1,
+            delay * 50), period * 50, TimeUnit.MILLISECONDS));
     }
 
     @Override
@@ -264,7 +278,9 @@ public class FoliaScheduler implements PlatformScheduler {
         CompletableFuture<T> future = new CompletableFuture<>();
         Runnable runnable = toFuture(future, task);
         Runnable runnableRetired = toFuture(future, retired);
-        entity.getScheduler().run(plugin, st -> runnable.run(), runnableRetired);
+        if (entity.getScheduler().run(plugin, st -> runnable.run(), runnableRetired) == null) {
+            future.cancel(false);
+        }
         return future;
     }
 
@@ -303,6 +319,9 @@ public class FoliaScheduler implements PlatformScheduler {
                 future.complete(task.call());
             } catch (Exception e) {
                 future.completeExceptionally(e);
+            } catch (Error error) {
+                future.completeExceptionally(error);
+                throw error;
             }
         };
     }

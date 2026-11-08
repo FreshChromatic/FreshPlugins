@@ -17,9 +17,10 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 public final class V26_2WorldInspectionGateway implements WorldInspectionGateway {
+
     @Override
-    public List<StructureInfo> detectStructures(World world, int blockX, int blockZ,
-                                                int radiusChunks, Predicate<String> idFilter) {
+    public List<StructureInfo> detectStructures(World world, int blockX, int blockZ, int radiusChunks,
+        Predicate<String> idFilter) {
         ServerLevel level = ((CraftWorld) world).getHandle();
         ChunkPos chunkPos = new ChunkPos(blockX >> 4, blockZ >> 4);
         List<StructureInfo> result = new ArrayList<>();
@@ -27,18 +28,20 @@ public final class V26_2WorldInspectionGateway implements WorldInspectionGateway
         for (int dx = -radiusChunks; dx <= radiusChunks; dx++) {
             for (int dz = -radiusChunks; dz <= radiusChunks; dz++) {
                 ChunkPos inspected = new ChunkPos(chunkPos.x() + dx, chunkPos.z() + dz);
-                for (StructureStart start : level.structureManager().startsForStructure(
-                        inspected, structure -> {
-                            String id = level.registryAccess().lookupOrThrow(Registries.STRUCTURE)
-                                .getKey(structure).toString();
-                            return idFilter.test(id);
-                        })) {
-                    if (!start.isValid() || !seen.add(start)) continue;
-                    String id = level.registryAccess().lookupOrThrow(Registries.STRUCTURE)
-                        .getKey(start.getStructure()).toString();
+                for (StructureStart start : level.structureManager().startsForStructure(inspected, structure -> {
+                    String id = level.registryAccess().lookupOrThrow(Registries.STRUCTURE).getKey(structure).toString();
+                    return idFilter.test(id);
+                })) {
+                    if (!start.isValid() || !seen.add(start)) {
+                        continue;
+                    }
+                    String id = level.registryAccess()
+                        .lookupOrThrow(Registries.STRUCTURE)
+                        .getKey(start.getStructure())
+                        .toString();
                     var box = start.getBoundingBox();
-                    result.add(new StructureInfo(id, new BlockBounds(
-                        box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ())));
+                    result.add(new StructureInfo(id, new BlockBounds(box.minX(), box.minY(), box.minZ(), box.maxX(),
+                        box.maxY(), box.maxZ())));
                 }
             }
         }

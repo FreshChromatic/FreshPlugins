@@ -12,7 +12,7 @@ public final class StructureDetector {
 
     public record Detected(String structureId, BlockBounds boundingBox) {}
 
-    private PluginConfig config;
+    private PluginConfig                 config;
     private final WorldInspectionGateway inspection;
 
     public StructureDetector(PluginConfig config) {
@@ -36,8 +36,7 @@ public final class StructureDetector {
      */
     public List<Detected> detectAt(World world, int blockX, int blockZ) {
         int radius = Math.max(0, config.structure.detect.scanRadiusChunks);
-        return inspection.detectStructures(
-                world, blockX, blockZ, radius, config.structure.refresh::isTracked)
+        return inspection.detectStructures(world, blockX, blockZ, radius, config.structure.refresh::isTracked)
             .stream()
             .map(info -> new Detected(info.id(), info.bounds()))
             .toList();

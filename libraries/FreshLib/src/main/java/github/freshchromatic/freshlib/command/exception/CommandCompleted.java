@@ -6,6 +6,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.kyori.adventure.util.ComponentMessageThrowable;
 
 public final class CommandCompleted extends RuntimeException implements ComponentMessageThrowable {
+
     private static final long serialVersionUID = -8318440562349647391L;
 
     private final Component message;

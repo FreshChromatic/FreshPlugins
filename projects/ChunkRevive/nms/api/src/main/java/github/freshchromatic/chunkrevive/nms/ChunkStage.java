@@ -4,24 +4,17 @@ import java.util.Locale;
 
 /** Ordered, version-neutral subset of persisted chunk generation stages. */
 public enum ChunkStage {
-    EMPTY,
-    STRUCTURE_STARTS,
-    STRUCTURE_REFERENCES,
-    BIOMES,
-    NOISE,
-    SURFACE,
-    CARVERS,
-    FEATURES,
-    LIGHT,
-    SPAWN,
-    FULL;
+
+    EMPTY, STRUCTURE_STARTS, STRUCTURE_REFERENCES, BIOMES, NOISE, SURFACE, CARVERS, FEATURES, LIGHT, SPAWN, FULL;
 
     public boolean isBefore(ChunkStage other) {
         return ordinal() < other.ordinal();
     }
 
     public static ChunkStage configured(String raw) {
-        if (raw == null) return FULL;
+        if (raw == null) {
+            return FULL;
+        }
         if (raw.trim().equalsIgnoreCase("terrain")) {
             return CARVERS;
         }
@@ -35,7 +28,9 @@ public enum ChunkStage {
     public static ChunkStage persisted(String raw) {
         String key = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         int colon = key.indexOf(':');
-        if (colon >= 0) key = key.substring(colon + 1);
+        if (colon >= 0) {
+            key = key.substring(colon + 1);
+        }
         return switch (key) {
             case "full" -> FULL;
             case "heightmaps", "spawn" -> SPAWN;

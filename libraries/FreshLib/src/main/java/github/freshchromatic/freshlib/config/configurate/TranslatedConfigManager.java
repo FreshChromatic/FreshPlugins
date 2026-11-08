@@ -18,11 +18,11 @@ public class TranslatedConfigManager<T extends Config> extends AbstractConfigMan
     }
 
     @Override
-    public void load() {
+    public boolean tryLoad() {
         if (resourcePath != null) {
             extractDefaultIfNeeded();
         }
-        super.load();
+        return super.tryLoad();
     }
 
     private void extractDefaultIfNeeded() {

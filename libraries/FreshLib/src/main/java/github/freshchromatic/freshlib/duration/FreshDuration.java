@@ -2,9 +2,12 @@ package github.freshchromatic.freshlib.duration;
 
 import org.jetbrains.annotations.NotNull;
 
-public record FreshDuration(
-        long millis
-) {
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public record FreshDuration(long millis) {
+
+    private static final Pattern TOKEN_PATTERN = Pattern.compile("(\\d+)(ms|s|m|h|d)");
 
     public static FreshDuration parse(String input) {
         if (input == null || input.isEmpty()) {
@@ -17,10 +20,7 @@ public record FreshDuration(
 
         long totalMillis = 0;
 
-        // Regex: number + unit
-        java.util.regex.Matcher matcher = java.util.regex.Pattern
-                .compile("(\\d+)(ms|s|m|h|d)")
-                .matcher(input);
+        Matcher matcher = TOKEN_PATTERN.matcher(input);
 
         int pos = 0;
 
@@ -30,30 +30,18 @@ public record FreshDuration(
             }
 
             long value = Long.parseLong(matcher.group(1));
-            if (value < 0) {
-                throw new IllegalArgumentException("Value cannot be negative: " + value);
-            }
-
-            String unit = matcher.group(2);
-
-            switch (unit) {
-                case "ms":
-                    totalMillis += value;
-                    break;
-                case "s":
-                    totalMillis += value * 1_000;
-                    break;
-                case "m":
-                    totalMillis += value * 60_000;
-                    break;
-                case "h":
-                    totalMillis += value * 3_600_000;
-                    break;
-                case "d":
-                    totalMillis += value * 86_400_000;
-                    break;
-                default:
-                    throw new IllegalArgumentException("Unknown unit: " + unit);
+            long multiplier = switch (matcher.group(2)) {
+                case "ms" -> 1;
+                case "s" -> 1_000;
+                case "m" -> 60_000;
+                case "h" -> 3_600_000;
+                case "d" -> 86_400_000;
+                default -> throw new IllegalArgumentException("Unknown unit: " + matcher.group(2));
+            };
+            try {
+                totalMillis = Math.addExact(totalMillis, Math.multiplyExact(value, multiplier));
+            } catch (ArithmeticException overflow) {
+                throw new IllegalArgumentException("Duration exceeds the supported range: " + input, overflow);
             }
 
             pos = matcher.end();
@@ -103,11 +91,21 @@ public record FreshDuration(
         remainingMillis %= 1_000;
 
         StringBuilder sb = new StringBuilder();
-        if (days > 0) sb.append(days).append("d");
-        if (hours > 0) sb.append(hours).append("h");
-        if (minutes > 0) sb.append(minutes).append("m");
-        if (seconds > 0) sb.append(seconds).append("s");
-        if (remainingMillis > 0) sb.append(remainingMillis).append("ms");
+        if (days > 0) {
+            sb.append(days).append("d");
+        }
+        if (hours > 0) {
+            sb.append(hours).append("h");
+        }
+        if (minutes > 0) {
+            sb.append(minutes).append("m");
+        }
+        if (seconds > 0) {
+            sb.append(seconds).append("s");
+        }
+        if (remainingMillis > 0) {
+            sb.append(remainingMillis).append("ms");
+        }
 
         return sb.toString();
     }

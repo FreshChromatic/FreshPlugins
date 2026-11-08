@@ -7,6 +7,7 @@ import java.util.Set;
 
 /** Contains no NMS fields, so ServiceLoader can inspect it safely on every server version. */
 public final class V1_21_11NmsPlatformProvider implements NmsPlatformProvider {
+
     @Override
     public Set<String> supportedMinecraftVersions() {
         return Set.of("26.1.2");
@@ -17,5 +18,3 @@ public final class V1_21_11NmsPlatformProvider implements NmsPlatformProvider {
         return new V1_21_11NmsPlatform();
     }
 }
-
-

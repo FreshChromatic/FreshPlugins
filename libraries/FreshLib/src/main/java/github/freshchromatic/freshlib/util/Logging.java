@@ -9,7 +9,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Logging {
-    private static final StackWalker WALKER = StackWalker.getInstance(Option.RETAIN_CLASS_REFERENCE);
+
+    private static final StackWalker              WALKER  = StackWalker.getInstance(Option.RETAIN_CLASS_REFERENCE);
     private static final Map<Plugin, LoggerProxy> PROXIES = new ConcurrentHashMap<>();
 
     private Logging() {
@@ -36,6 +37,7 @@ public final class Logging {
     }
 
     public static final class LoggerProxy {
+
         private final Logger slf4j;
 
         public LoggerProxy(Logger slf4j) {
@@ -43,19 +45,27 @@ public final class Logging {
         }
 
         public void info(String msg) {
-            if (slf4j != null) slf4j.info(msg);
+            if (slf4j != null) {
+                slf4j.info(msg);
+            }
         }
 
         public void warning(String msg) {
-            if (slf4j != null) slf4j.warn(msg);
+            if (slf4j != null) {
+                slf4j.warn(msg);
+            }
         }
 
         public void severe(String msg) {
-            if (slf4j != null) slf4j.error(msg);
+            if (slf4j != null) {
+                slf4j.error(msg);
+            }
         }
 
         public void severe(String msg, Throwable t) {
-            if (slf4j != null) slf4j.error(msg, t);
+            if (slf4j != null) {
+                slf4j.error(msg, t);
+            }
         }
     }
 

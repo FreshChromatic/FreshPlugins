@@ -17,6 +17,8 @@ import org.incendo.cloud.minecraft.extras.MinecraftHelp;
 import org.incendo.cloud.parser.standard.StringParser;
 import org.incendo.cloud.suggestion.BlockingSuggestionProvider;
 import github.freshchromatic.freshlib.command.Commander;
+import github.freshchromatic.freshlib.command.FreshLibCommand;
+import github.freshchromatic.freshlib.command.FreshLibCommands;
 import github.freshchromatic.freshlib.config.ConfigManager;
 import github.freshchromatic.freshlib.config.Messages;
 import github.freshchromatic.freshlib.util.Components;
@@ -24,13 +26,14 @@ import github.freshchromatic.freshlib.util.Components;
 import static org.incendo.cloud.minecraft.extras.MinecraftHelp.helpColors;
 import static org.incendo.cloud.minecraft.extras.RichDescription.richDescription;
 
-public final class HelpCommand extends github.freshchromatic.freshlib.command.FreshLibCommand {
-    private final MinecraftHelp<Commander> minecraftHelp;
+public final class HelpCommand extends FreshLibCommand {
+
+    private final MinecraftHelp<Commander>                 minecraftHelp;
     private final TypedCommandComponent<Commander, String> helpQueryArgument;
-    private final ConfigManager configManager;
+    private final ConfigManager                            configManager;
 
     @Inject
-    private HelpCommand(final github.freshchromatic.freshlib.command.FreshLibCommands commands, final ConfigManager configManager) {
+    private HelpCommand(final FreshLibCommands commands, final ConfigManager configManager) {
         super(commands);
         this.configManager = configManager;
         this.minecraftHelp = createMinecraftHelp(commands.commandManager(), configManager);
@@ -51,15 +54,16 @@ public final class HelpCommand extends github.freshchromatic.freshlib.command.Fr
         this.minecraftHelp.queryCommands(context.get(this.helpQueryArgument), context.sender());
     }
 
-    private static TypedCommandComponent<Commander, String> createHelpQueryArgument(
-            final github.freshchromatic.freshlib.command.FreshLibCommands commands,
-            final ConfigManager configManager
-    ) {
+    private static TypedCommandComponent<Commander, String> createHelpQueryArgument(final FreshLibCommands commands,
+        final ConfigManager configManager) {
         final var commandHelpHandler = commands.commandManager().createHelpHandler();
-        final BlockingSuggestionProvider.Strings<Commander> suggestions = (context, input) ->
-            commandHelpHandler.queryRootIndex(context.sender()).entries().stream()
-                .map(CommandEntry::syntax)
-                .toList();
+        final BlockingSuggestionProvider.Strings<Commander> suggestions = (context,
+            input) ->
+                commandHelpHandler.queryRootIndex(context.sender())
+                    .entries()
+                    .stream()
+                    .map(CommandEntry::syntax)
+                    .toList();
         return CommandComponent.<Commander, String>ofType(String.class, "query")
             .parser(StringParser.greedyStringParser())
             .suggestionProvider(suggestions)
@@ -69,32 +73,27 @@ public final class HelpCommand extends github.freshchromatic.freshlib.command.Fr
             .build();
     }
 
-    private static MinecraftHelp<Commander> createMinecraftHelp(
-            final CommandManager<Commander> manager,
-            final ConfigManager configManager
-    ) {
+    private static MinecraftHelp<Commander> createMinecraftHelp(final CommandManager<Commander> manager,
+        final ConfigManager configManager) {
         return MinecraftHelp.<Commander>builder()
             .commandManager(manager)
             .audienceProvider(AudienceProvider.nativeAudience())
             .commandPrefix(String.format("/%s help", configManager.config().settings.commands.mainCommandLabel))
-            .colors(helpColors(
-                TextColor.fromHexString("#0044AA"),
-                NamedTextColor.WHITE,
-                TextColor.fromHexString("#0099FF"),
-                NamedTextColor.GRAY,
-                NamedTextColor.DARK_GRAY
-            ))
+            .colors(helpColors(TextColor.fromHexString("#0044AA"), NamedTextColor.WHITE, TextColor.fromHexString("#0099FF"), NamedTextColor.GRAY,
+                    NamedTextColor.DARK_GRAY))
             .messageProvider((sender, key, args) -> helpMessage(configManager, key, args))
             .build();
     }
 
-    private static Component helpMessage(final ConfigManager configManager, final String key, final Map<String, String> args) {
+    private static Component helpMessage(final ConfigManager configManager, final String key,
+        final Map<String, String> args) {
         Messages.ComponentMessage message = configManager.messages().command.message.help.getMessage(key);
         if (message == null) {
             return Component.text("Missing help key: " + key, NamedTextColor.RED);
         }
-        return message.withPlaceholders(args.entrySet().stream()
-                .map(e -> Components.placeholder(e.getKey(), e.getValue()))
-                .collect(Collectors.toList()));
+        return message.withPlaceholders(args.entrySet()
+            .stream()
+            .map(e -> Components.placeholder(e.getKey(), e.getValue()))
+            .collect(Collectors.toList()));
     }
 }

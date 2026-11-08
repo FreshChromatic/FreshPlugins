@@ -2,7 +2,6 @@ package github.freshchromatic.freshlib.util;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.function.Supplier;
 
 public class ReflectionUtils {
 
@@ -17,13 +16,13 @@ public class ReflectionUtils {
             field.setAccessible(false);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not read field " + name + ": " + e.getMessage(), e);
         }
 
         return result;
     }
 
-    public static Object getStaticValue(Class clazz, String name) {
+    public static Object getStaticValue(Class<?> clazz, String name) {
         Object result = null;
 
         try {
@@ -34,7 +33,7 @@ public class ReflectionUtils {
             field.setAccessible(false);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not read static field " + name + ": " + e.getMessage(), e);
         }
 
         return result;
@@ -49,7 +48,7 @@ public class ReflectionUtils {
             field.setAccessible(false);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not write field " + name + ": " + e.getMessage(), e);
         }
     }
 
@@ -57,7 +56,7 @@ public class ReflectionUtils {
         try {
             return instance.getClass().getDeclaredMethod(methodName);
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not find method " + methodName + ": " + e.getMessage(), e);
         }
 
         return null;

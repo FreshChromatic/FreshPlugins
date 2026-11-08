@@ -27,14 +27,14 @@ import org.bukkit.entity.Entity;
 import org.bukkit.plugin.Plugin;
 
 public abstract class ScheduledRunnable implements Runnable {
-    
+
     private ScheduledTask task;
-    
+
     public synchronized boolean isCancelled() {
         checkScheduled();
         return task.isCancelled();
     }
-    
+
     public synchronized void cancel() {
         checkScheduled();
         task.cancel();
@@ -95,7 +95,8 @@ public abstract class ScheduledRunnable implements Runnable {
         return setupTask(Scheduler.runTaskLater(plugin, this, delay, world, chunkX, chunkZ));
     }
 
-    public synchronized ScheduledTask runTaskTimer(Plugin plugin, long delay, long period, World world, int chunkX, int chunkZ) {
+    public synchronized ScheduledTask runTaskTimer(Plugin plugin, long delay, long period, World world, int chunkX,
+        int chunkZ) {
         checkNotYetScheduled();
         return setupTask(Scheduler.runTaskTimer(plugin, this, delay, period, world, chunkX, chunkZ));
     }
@@ -104,12 +105,12 @@ public abstract class ScheduledRunnable implements Runnable {
         checkNotYetScheduled();
         return setupTask(Scheduler.runTask(plugin, this));
     }
-    
+
     public synchronized ScheduledTask runTaskLater(Plugin plugin, long delay) {
         checkNotYetScheduled();
         return setupTask(Scheduler.runTaskLater(plugin, this, delay));
     }
-    
+
     public synchronized ScheduledTask runTaskTimer(Plugin plugin, long delay, long period) {
         checkNotYetScheduled();
         return setupTask(Scheduler.runTaskTimer(plugin, this, delay, period));
@@ -124,7 +125,7 @@ public abstract class ScheduledRunnable implements Runnable {
         checkNotYetScheduled();
         return setupTask(Scheduler.runTaskLaterAsynchronously(plugin, this, delay));
     }
-    
+
     public synchronized ScheduledTask runTaskTimerAsynchronously(Plugin plugin, long delay, long period) {
         checkNotYetScheduled();
         return setupTask(Scheduler.runTaskTimerAsynchronously(plugin, this, delay, period));

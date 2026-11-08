@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
  * Utility for monitoring packet traffic using NMS and Netty.
  */
 public final class PacketMonitor {
+
     private static final String HANDLER_NAME = "freshlib_traffic_monitor";
 
     private PacketMonitor() {
@@ -28,13 +29,8 @@ public final class PacketMonitor {
      * @param outboundPackets AtomicLong for Server -> Player packet count
      * @param inboundPackets  AtomicLong for Player -> Server packet count
      */
-    public static void inject(
-            final Player player,
-            final AtomicLong outboundBytes,
-            final AtomicLong inboundBytes,
-            final AtomicLong outboundPackets,
-            final AtomicLong inboundPackets
-    ) {
+    public static void inject(final Player player, final AtomicLong outboundBytes, final AtomicLong inboundBytes,
+        final AtomicLong outboundPackets, final AtomicLong inboundPackets) {
         if (player == null) {
             return;
         }
@@ -46,8 +42,10 @@ public final class PacketMonitor {
         }
 
         channel.pipeline().addBefore("packet_handler", HANDLER_NAME, new ChannelDuplexHandler() {
+
             @Override
-            public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise) throws Exception {
+            public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise)
+                throws Exception {
                 outboundPackets.incrementAndGet();
                 if (msg instanceof ByteBuf buf) {
                     outboundBytes.addAndGet(buf.readableBytes());

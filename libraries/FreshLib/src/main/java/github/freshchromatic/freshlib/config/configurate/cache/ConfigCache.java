@@ -3,7 +3,9 @@ package github.freshchromatic.freshlib.config.configurate.cache;
 import github.freshchromatic.freshlib.util.Logging;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -11,28 +13,16 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-/**
- * Configuration cache with automatic file watching and hot-reload capability.
- *
- * <p>Features:
- * <ul>
- *   <li>Automatic file change detection via WatchService</li>
- *   <li>Configurable debounce interval to avoid excessive reloads</li>
- *   <li>Thread-safe configuration access</li>
- *   <li>Event notification on configuration changes</li>
- * </ul></p>
- *
- * <p>Based on DiscordSRV's reload mechanism with enhanced caching.</p>
- */
+/** Caches a configuration and polls its file for changes. */
 public class ConfigCache<T> {
 
-    private final Path configPath;
-    private volatile T cachedConfig;
-    private final Consumer<T> loader;
-    private final Consumer<T> saver;
-    private final long debounceMs;
-    private ScheduledExecutorService watchService;
-    private volatile long lastModified;
+    private final Path                     configPath;
+    private volatile T                     cachedConfig;
+    private final Consumer<T>              loader;
+    private final Consumer<T>              saver;
+    private final long                     debounceMs;
+    private ScheduledExecutorService       watchService;
+    private volatile FileState             lastFileState;
     private final Map<Object, Consumer<T>> changeListeners = new ConcurrentHashMap<>();
 
     public ConfigCache(Path configPath, Consumer<T> loader, Consumer<T> saver) {
@@ -40,11 +30,14 @@ public class ConfigCache<T> {
     }
 
     public ConfigCache(Path configPath, Consumer<T> loader, Consumer<T> saver, long debounceMs) {
+        if (debounceMs <= 0) {
+            throw new IllegalArgumentException("debounceMs must be greater than zero");
+        }
         this.configPath = configPath;
         this.loader = loader;
         this.saver = saver;
         this.debounceMs = debounceMs;
-        updateLastModified();
+        updateFileState();
     }
 
     /**
@@ -61,12 +54,10 @@ public class ConfigCache<T> {
         return cachedConfig;
     }
 
-    /**
-     * Sets the cached configuration and optionally saves to disk.
-     */
+    /** Sets the cached configuration and notifies registered listeners. */
     public void set(T config) {
         this.cachedConfig = config;
-        updateLastModified();
+        updateFileState();
         notifyListeners(config);
     }
 
@@ -76,9 +67,10 @@ public class ConfigCache<T> {
     public synchronized void load() {
         try {
             loader.accept(null);
-            Logging.logger().info("Configuration reloaded: " + configPath.getFileName());
         } catch (Exception e) {
             Logging.logger().severe("Failed to reload configuration: " + e.getMessage());
+        } finally {
+            updateFileState();
         }
     }
 
@@ -87,12 +79,8 @@ public class ConfigCache<T> {
      */
     public synchronized void save() {
         if (cachedConfig != null && saver != null) {
-            try {
-                saver.accept(cachedConfig);
-                updateLastModified();
-            } catch (Exception e) {
-                Logging.logger().severe("Failed to save configuration: " + e.getMessage());
-            }
+            saver.accept(cachedConfig);
+            updateFileState();
         }
     }
 
@@ -100,7 +88,9 @@ public class ConfigCache<T> {
      * Starts watching the configuration file for changes.
      */
     public void startWatching() {
-        if (watchService != null) return;
+        if (watchService != null) {
+            return;
+        }
 
         watchService = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "ConfigWatcher-" + configPath.getFileName());
@@ -162,12 +152,18 @@ public class ConfigCache<T> {
     /**
      * Checks if the file has been modified since last check.
      */
-    private void checkForChanges() {
+    void checkForChanges() {
         try {
-            if (!Files.exists(configPath)) return;
+            if (!Files.exists(configPath)) {
+                return;
+            }
 
-            long currentModified = Files.getLastModifiedTime(configPath).toMillis();
-            if (currentModified > lastModified) {
+            FileState currentState = readFileState();
+            if (!currentState.exists()) {
+                lastFileState = currentState;
+                return;
+            }
+            if (!currentState.equals(lastFileState)) {
                 Logging.logger().info("Detected configuration change in: " + configPath.getFileName());
                 load();
             }
@@ -176,16 +172,19 @@ public class ConfigCache<T> {
         }
     }
 
-    private void updateLastModified() {
+    private void updateFileState() {
         try {
-            if (Files.exists(configPath)) {
-                lastModified = Files.getLastModifiedTime(configPath).toMillis();
-            } else {
-                lastModified = System.currentTimeMillis();
-            }
+            lastFileState = readFileState();
         } catch (IOException e) {
-            lastModified = System.currentTimeMillis();
+            lastFileState = FileState.missing();
         }
+    }
+
+    private FileState readFileState() throws IOException {
+        if (!Files.exists(configPath)) {
+            return FileState.missing();
+        }
+        return new FileState(true, Files.getLastModifiedTime(configPath), Files.size(configPath));
     }
 
     @SuppressWarnings("unchecked")
@@ -205,5 +204,12 @@ public class ConfigCache<T> {
 
     public boolean isWatching() {
         return watchService != null && !watchService.isShutdown();
+    }
+
+    private record FileState(boolean exists, FileTime lastModified, long size) {
+
+        private static FileState missing() {
+            return new FileState(false, null, 0);
+        }
     }
 }

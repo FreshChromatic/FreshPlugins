@@ -21,9 +21,7 @@
 package github.freshchromatic.freshlib.scheduler.platform.bukkit;
 
 import github.freshchromatic.freshlib.scheduler.platform.PlatformScheduledTask;
-import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Objects;
@@ -38,9 +36,7 @@ public class BukkitScheduledTask implements PlatformScheduledTask<BukkitTask> {
 
     @Override
     public boolean isCancelled() {
-        BukkitScheduler scheduler = Bukkit.getScheduler();
-        int taskId = task.getTaskId();
-        return !scheduler.isCurrentlyRunning(taskId) && !scheduler.isQueued(taskId);
+        return task.isCancelled();
     }
 
     @Override
@@ -60,7 +56,9 @@ public class BukkitScheduledTask implements PlatformScheduledTask<BukkitTask> {
 
     @Override
     public boolean equals(Object object) {
-        if (object == null || getClass() != object.getClass()) return false;
+        if (object == null || getClass() != object.getClass()) {
+            return false;
+        }
         BukkitScheduledTask that = (BukkitScheduledTask) object;
         return Objects.equals(task, that.task);
     }

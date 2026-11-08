@@ -37,6 +37,7 @@ import java.util.function.Supplier;
  * Represents an element in a gui that will query all it's data when drawn.
  */
 public class DynamicGuiElement extends GuiElement {
+
     private Function<HumanEntity, GuiElement> query;
 
     private Map<UUID, CacheEntry> cachedElements = new ConcurrentHashMap<>();
@@ -88,18 +89,18 @@ public class DynamicGuiElement extends GuiElement {
         cachedElements.put(player.getUniqueId(), cacheEntry);
         return cacheEntry;
     }
-    
+
     @Override
     public void setGui(InventoryGui gui) {
         super.setGui(gui);
     }
-    
+
     @Override
     public ItemStack getItem(HumanEntity who, int slot) {
         GuiElement element = getCachedElement(who);
         return element != null ? element.getItem(who, slot) : null;
     }
-    
+
     @Override
     public Action getAction(HumanEntity who) {
         GuiElement element = getCachedElement(who);
@@ -110,7 +111,7 @@ public class DynamicGuiElement extends GuiElement {
     public GuiElement getEffectiveElement(HumanEntity who, int slot) {
         return getCachedElement(who);
     }
-    
+
     /**
      * Get the supplier for this element's content
      * @return The supplier query
@@ -118,7 +119,7 @@ public class DynamicGuiElement extends GuiElement {
     public Function<HumanEntity, GuiElement> getQuery() {
         return query;
     }
-    
+
     /**
      * Set the supplier for this element's content
      * @param query The supplier query to set
@@ -140,7 +141,7 @@ public class DynamicGuiElement extends GuiElement {
         }
         return element;
     }
-    
+
     /**
      * Get the cached element, creates a new one if there is none for that player.
      * Use {@link #getLastCached(HumanEntity)} to check if a player has something cached.
@@ -167,7 +168,7 @@ public class DynamicGuiElement extends GuiElement {
         }
         return cached != null ? cached.getElement() : null;
     }
-    
+
     /**
      * Get the time at which this element was last cached for a certain player
      * @param who The player to get the last cache time for
@@ -179,8 +180,9 @@ public class DynamicGuiElement extends GuiElement {
     }
 
     public class CacheEntry {
+
         private final GuiElement element;
-        private final long created = System.currentTimeMillis();
+        private final long       created = System.currentTimeMillis();
 
         CacheEntry(GuiElement element) {
             this.element = element;
@@ -195,4 +197,3 @@ public class DynamicGuiElement extends GuiElement {
         }
     }
 }
-

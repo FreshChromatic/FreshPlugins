@@ -3,6 +3,8 @@ package github.freshchromatic.chunkrevive.presentation.command;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Shared two-step confirmation token store for {@code /cr fullmark}, {@code /cr resetmark} and
@@ -22,17 +24,38 @@ public final class ConfirmationManager {
 
     /** Registers a confirmation together with the immutable preview/result it applies to. */
     public void request(Object senderId, String key, int timeoutSeconds, Object payload) {
-        pending.put(senderId, new Pending(
-            key, System.currentTimeMillis() + timeoutSeconds * 1000L, payload));
+        pending.put(senderId, new Pending(key, System.currentTimeMillis() + timeoutSeconds * 1000L, payload));
     }
 
     /**
      * Returns the matching confirmation payload without consuming the token. This lets a confirmed
      * command execute the exact previewed selection instead of performing an expensive scan again.
      */
-    public Optional<Object> peekPayload(Object senderId, String key) {
-        Pending p = validPending(senderId, key);
-        return p == null ? Optional.empty() : Optional.ofNullable(p.payload());
+    public <T> Optional<T> peekPayload(Object senderId, String key, Class<T> payloadType) {
+        Pending pendingConfirmation = validPending(senderId, key);
+        if (pendingConfirmation == null || !payloadType.isInstance(pendingConfirmation.payload())) {
+            return Optional.empty();
+        }
+        return Optional.of(payloadType.cast(pendingConfirmation.payload()));
+    }
+
+    public <T> Optional<T> consumePayload(Object senderId, String key, Class<T> payloadType) {
+        var payload = new AtomicReference<T>();
+        pending.compute(senderId, (id, pendingConfirmation) -> {
+            if (pendingConfirmation == null) {
+                return null;
+            }
+            if (System.currentTimeMillis() > pendingConfirmation.expiresAt() || !pendingConfirmation.key().equals(
+                key)) {
+                return null;
+            }
+            if (!payloadType.isInstance(pendingConfirmation.payload())) {
+                return pendingConfirmation;
+            }
+            payload.set(payloadType.cast(pendingConfirmation.payload()));
+            return null;
+        });
+        return Optional.ofNullable(payload.get());
     }
 
     /**
@@ -40,15 +63,26 @@ public final class ConfirmationManager {
      * Returns false (without side effects beyond cleanup) if there is no matching, non-expired request.
      */
     public boolean confirm(Object senderId, String key) {
-        Pending p = validPending(senderId, key);
-        if (p == null) return false;
-        pending.remove(senderId);
-        return true;
+        var confirmed = new AtomicBoolean();
+        pending.compute(senderId, (id, pendingConfirmation) -> {
+            if (pendingConfirmation == null) {
+                return null;
+            }
+            if (System.currentTimeMillis() > pendingConfirmation.expiresAt() || !pendingConfirmation.key().equals(
+                key)) {
+                return null;
+            }
+            confirmed.set(true);
+            return null;
+        });
+        return confirmed.get();
     }
 
     private Pending validPending(Object senderId, String key) {
         Pending p = pending.get(senderId);
-        if (p == null) return null;
+        if (p == null) {
+            return null;
+        }
         if (System.currentTimeMillis() > p.expiresAt() || !p.key().equals(key)) {
             pending.remove(senderId, p);
             return null;

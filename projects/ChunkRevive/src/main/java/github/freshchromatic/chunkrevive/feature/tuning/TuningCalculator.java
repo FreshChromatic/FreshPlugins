@@ -2,16 +2,16 @@ package github.freshchromatic.chunkrevive.feature.tuning;
 
 public final class TuningCalculator {
 
-    private TuningCalculator() {}
+    private TuningCalculator() {
+    }
 
     public static TuningProfile recommendedProfile(ServerResourceSnapshot resources) {
-        boolean lowSystemMemory = resources.totalSystemMemoryMiB() > 0
-            && (double) resources.freeSystemMemoryMiB() / resources.totalSystemMemoryMiB() < 0.15;
-        boolean unusuallyHighThreadCount = resources.jvmThreadCount()
-            > Math.max(128, resources.logicalProcessors() * 32);
-        if (resources.logicalProcessors() <= 4 || resources.maxHeapMiB() <= 4096
-                || resources.systemCpuLoad() >= 0.75 || resources.heapUsageRatio() >= 0.75
-                || lowSystemMemory || unusuallyHighThreadCount) {
+        boolean lowSystemMemory = resources.totalSystemMemoryMiB() > 0 && (double) resources.freeSystemMemoryMiB()
+            / resources.totalSystemMemoryMiB() < 0.15;
+        boolean unusuallyHighThreadCount = resources.jvmThreadCount() > Math.max(128, resources.logicalProcessors()
+            * 32);
+        if (resources.logicalProcessors() <= 4 || resources.maxHeapMiB() <= 4096 || resources.systemCpuLoad() >= 0.75
+            || resources.heapUsageRatio() >= 0.75 || lowSystemMemory || unusuallyHighThreadCount) {
             return TuningProfile.OPTIMIZED;
         }
         return TuningProfile.BALANCED;
@@ -24,11 +24,18 @@ public final class TuningCalculator {
         // One terrain DAG owns the shared generation pool. CARVERS snapshots are bounded and
         // retained separately, so worker count is governed primarily by short-lived noise/surface
         // allocations rather than the old "4 GiB = 4 workers" estimate.
-        int heapThreadCap = heapGiB <= 2 ? 3
-            : heapGiB <= 4 ? 8
-            : heapGiB <= 8 ? 12
-            : heapGiB <= 16 ? 16
-            : 24;
+        int heapThreadCap;
+        if (heapGiB <= 2) {
+            heapThreadCap = 3;
+        } else if (heapGiB <= 4) {
+            heapThreadCap = 8;
+        } else if (heapGiB <= 8) {
+            heapThreadCap = 12;
+        } else if (heapGiB <= 16) {
+            heapThreadCap = 16;
+        } else {
+            heapThreadCap = 24;
+        }
         int cpuWorkers = Math.max(1, (int) Math.floor(processors * profile.cpuRatio()));
         int reservedCpuCap = processors <= 2 ? processors : processors - 2;
         int generationThreads = Math.min(Math.max(1, reservedCpuCap), Math.min(cpuWorkers, heapThreadCap));
@@ -38,11 +45,18 @@ public final class TuningCalculator {
         // cache entries; measured throughput is therefore higher with one spatial tile at a time.
         int concurrency = 1;
 
-        int baseTileSize = heapGiB <= 2 ? 48
-            : heapGiB <= 4 ? 128
-            : heapGiB <= 8 ? 192
-            : heapGiB <= 16 ? 256
-            : 384;
+        int baseTileSize;
+        if (heapGiB <= 2) {
+            baseTileSize = 48;
+        } else if (heapGiB <= 4) {
+            baseTileSize = 128;
+        } else if (heapGiB <= 8) {
+            baseTileSize = 192;
+        } else if (heapGiB <= 16) {
+            baseTileSize = 256;
+        } else {
+            baseTileSize = 384;
+        }
         int workTileSize = switch (profile) {
             case OPTIMIZED -> Math.min(baseTileSize, 96);
             case BALANCED -> baseTileSize;
@@ -56,21 +70,8 @@ public final class TuningCalculator {
         };
 
         int applyBatchSize = Math.max(1, profile.applyBatchSize());
-        return new TuningRecommendation(
-            profile,
-            generationThreads,
-            profile.generationPriority(),
-            profile.batchDelayTicks(),
-            concurrency,
-            0,
-            workTileSize,
-            applyBatchSize,
-            "CONFIG",
-            "CONFIG",
-            "CONFIG",
-            profile.heapHighWatermarkPercent(),
-            scanThreads,
-            profile.scanPriority()
-        );
+        return new TuningRecommendation(profile, generationThreads, profile.generationPriority(),
+            profile.batchDelayTicks(), concurrency, 0, workTileSize, applyBatchSize, "CONFIG", "CONFIG", "CONFIG",
+            profile.heapHighWatermarkPercent(), scanThreads, profile.scanPriority());
     }
 }

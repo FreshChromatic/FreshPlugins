@@ -11,7 +11,7 @@ import java.util.List;
  */
 public class ValidationResult {
 
-    private final List<ValidationError> errors;
+    private final List<ValidationError>   errors;
     private final List<ValidationWarning> warnings;
 
     public ValidationResult() {
@@ -55,7 +55,9 @@ public class ValidationResult {
             sb.append("errors=").append(errors.size());
         }
         if (!warnings.isEmpty()) {
-            if (sb.length() > "ValidationResult{".length()) sb.append(", ");
+            if (sb.length() > "ValidationResult{".length()) {
+                sb.append(", ");
+            }
             sb.append("warnings=").append(warnings.size());
         }
         sb.append("}");
@@ -63,6 +65,7 @@ public class ValidationResult {
     }
 
     public static class ValidationError {
+
         private final String path;
         private final String message;
 
@@ -71,8 +74,13 @@ public class ValidationResult {
             this.message = message;
         }
 
-        public String getPath() { return path; }
-        public String getMessage() { return message; }
+        public String getPath() {
+            return path;
+        }
+
+        public String getMessage() {
+            return message;
+        }
 
         @Override
         public String toString() {
@@ -81,6 +89,7 @@ public class ValidationResult {
     }
 
     public static class ValidationWarning {
+
         private final String path;
         private final String message;
 
@@ -89,8 +98,13 @@ public class ValidationResult {
             this.message = message;
         }
 
-        public String getPath() { return path; }
-        public String getMessage() { return message; }
+        public String getPath() {
+            return path;
+        }
+
+        public String getMessage() {
+            return message;
+        }
 
         @Override
         public String toString() {

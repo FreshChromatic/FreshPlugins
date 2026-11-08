@@ -13,10 +13,11 @@ import github.freshchromatic.chunkrevive.nms.v26_2.scan.V26_2WorldScanGateway;
 import java.util.Set;
 
 public final class V26_2NmsPlatform implements NmsPlatform {
-    private final TerrainGateway terrain = new V26_2TerrainGateway();
+
+    private final TerrainGateway         terrain         = new V26_2TerrainGateway();
     private final WorldInspectionGateway worldInspection = new V26_2WorldInspectionGateway();
-    private final ChunkStorageGateway chunkStorage = new V26_2ChunkStorageGateway();
-    private final WorldScanGateway worldScan = new V26_2WorldScanGateway();
+    private final ChunkStorageGateway    chunkStorage    = new V26_2ChunkStorageGateway();
+    private final WorldScanGateway       worldScan       = new V26_2WorldScanGateway();
 
     @Override
     public Set<String> supportedMinecraftVersions() {

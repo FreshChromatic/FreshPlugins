@@ -1,6 +1,7 @@
 package github.freshchromatic.freshlib.util;
 
 public final class Folia {
+
     public static final boolean FOLIA;
 
     static {

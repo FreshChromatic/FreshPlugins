@@ -29,16 +29,22 @@ import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public abstract class AbstractConfigManager<T extends Config> {
 
-    protected final Path path;
-    protected final Class<T> configClass;
-    private final TypeToken<T> typeToken;
-    protected T config;
+    protected final Path                                                        path;
+    protected final Class<T>                                                    configClass;
+    private final TypeToken<T>                                                  typeToken;
+    protected T                                                                 config;
     protected AbstractConfigurationLoader<? extends CommentedConfigurationNode> loader;
 
     public AbstractConfigManager(Path path, Class<T> configClass) {
@@ -48,27 +54,31 @@ public abstract class AbstractConfigManager<T extends Config> {
     }
 
     protected ObjectMapper.Factory objectMapperFactory() {
-        Comparator<OrderedFieldDiscovererProxy.FieldCollectorData<Object, ?>> fieldOrder = Comparator.comparingInt(data -> {
-            Order order = data.annotations().getAnnotation(Order.class);
-            return order != null ? order.value() : 0;
-        });
+        Comparator<OrderedFieldDiscovererProxy.FieldCollectorData<Object, ?>> fieldOrder = Comparator.comparingInt(
+            data -> {
+                Order order = data.annotations().getAnnotation(Order.class);
+                return order != null ? order.value() : 0;
+            });
 
         return ObjectMapper.factoryBuilder()
-                .defaultNamingScheme(NamingSchemes.LOWER_CASE_DASHED)
-                .addDiscoverer(new OrderedFieldDiscovererProxy<>((FieldDiscoverer<Object>) (Object) FieldValueDiscovererProxy.EMPTY_CONSTRUCTOR_INSTANCE, fieldOrder))
-                .addDiscoverer(new OrderedFieldDiscovererProxy<>((FieldDiscoverer<Object>) FieldDiscoverer.record(), fieldOrder))
-                .addProcessor(Comment.class, Processor.comments())
-                .build();
+            .defaultNamingScheme(NamingSchemes.LOWER_CASE_DASHED)
+            .addDiscoverer(
+            new OrderedFieldDiscovererProxy<>(
+                (FieldDiscoverer<Object>) (Object) FieldValueDiscovererProxy.EMPTY_CONSTRUCTOR_INSTANCE,
+                fieldOrder))
+            .addDiscoverer(new OrderedFieldDiscovererProxy<>(
+                    (FieldDiscoverer<Object>) FieldDiscoverer.record(), fieldOrder))
+            .addProcessor(Comment.class, Processor.comments())
+            .build();
     }
 
     protected ConfigurationOptions options() {
         return ConfigurationOptions.defaults()
-                .header(header())
-                .serializers(builder -> builder
-                        .registerAnnotatedObjects(objectMapperFactory())
-                        .registerAll(TypeSerializerCollection.defaults())
-                        .registerAll(customSerializers())
-                );
+            .header(header())
+            .serializers(builder ->
+                builder.registerAnnotatedObjects(objectMapperFactory())
+                    .registerAll(TypeSerializerCollection.defaults())
+                    .registerAll(customSerializers()));
     }
 
     protected String header() {
@@ -77,27 +87,35 @@ public abstract class AbstractConfigManager<T extends Config> {
 
     protected TypeSerializerCollection customSerializers() {
         return TypeSerializerCollection.builder()
-                .register(Messages.ComponentMessage.class, new ComponentMessageSerializer())
-                .register(Messages.StringMessage.class, new StringMessageSerializer())
-                .build();
+            .register(Messages.ComponentMessage.class, new ComponentMessageSerializer())
+            .register(Messages.StringMessage.class, new StringMessageSerializer())
+            .build();
     }
 
     protected AbstractConfigurationLoader<? extends CommentedConfigurationNode> createLoader() {
         return YamlConfigurationLoader.builder()
-                .path(path)
-                .nodeStyle(NodeStyle.BLOCK)
-                .defaultOptions(options())
-                .build();
+            .path(path)
+            .nodeStyle(NodeStyle.BLOCK)
+            .defaultOptions(options())
+            .build();
     }
 
     public void load() {
-        if (loader == null) {
-            loader = createLoader();
-        }
+        tryLoad();
+    }
 
-        // Initialize with default instance in case load fails
+    public boolean tryLoad() {
         if (config == null) {
             config = createInstance();
+        }
+        var loaded = loadCandidate();
+        loaded.ifPresent(this::applyLoaded);
+        return loaded.isPresent();
+    }
+
+    public Optional<T> loadCandidate() {
+        if (loader == null) {
+            loader = createLoader();
         }
 
         try {
@@ -115,37 +133,37 @@ public abstract class AbstractConfigManager<T extends Config> {
             beforeDeserialize(node);
 
             // Populate the config object
-            config = Objects.requireNonNull(node.get(typeToken));
-            afterLoad(config, node);
+            T loaded = Objects.requireNonNull(node.get(typeToken));
+            afterLoad(loaded, node);
 
             // Save back to disk to ensure new options/comments are present.
             // Must re-serialize from config (not defaultNode) so that @Comment processors
             // are re-applied on a fresh node — mergeFrom() clears comments on leaf nodes
             // by copying the comment-less disk node via from(), wiping annotations-derived comments.
-            save();
-
+            saveCurrent(loaded);
+            return Optional.of(loaded);
         } catch (ConfigurateException e) {
-            Logging.logger().severe("Failed to load configuration " + path.getFileName() + ": " + e.getMessage());
-            e.printStackTrace();
+            Logging.logger().severe("Failed to load configuration " + path.getFileName(), e);
+            return Optional.empty();
         }
     }
 
+    public void applyLoaded(T loaded) {
+        config = Objects.requireNonNull(loaded);
+    }
+
     public void save() {
-        /* Future Implement
-        if (loader == null) {
-            loader = createLoader();
-        }
-        if (config == null) {
-            config = createInstance();
-        }
-        */
         try {
-            CommentedConfigurationNode node = loader.createNode(options());
-            node.set(typeToken, config);
-            save(node);
+            saveCurrent(config);
         } catch (ConfigurateException e) {
-            Logging.logger().severe("Failed to save configuration " + path.getFileName() + ": " + e.getMessage());
+            throw new IllegalStateException("Failed to save configuration " + path.getFileName(), e);
         }
+    }
+
+    private void saveCurrent(T value) throws ConfigurateException {
+        CommentedConfigurationNode node = loader.createNode(options());
+        node.set(typeToken, value);
+        save(node);
     }
 
     /**
@@ -167,10 +185,11 @@ public abstract class AbstractConfigManager<T extends Config> {
         // Generate YAML to a string (without comments — Configurate 4.1.2 doesn't write them)
         StringWriter sw = new StringWriter();
         YamlConfigurationLoader tempLoader = YamlConfigurationLoader.builder()
-                .sink(() -> new BufferedWriter(sw))
-                .nodeStyle(NodeStyle.BLOCK)
-                .defaultOptions(node.options())
-                .build();
+            .sink(() -> new BufferedWriter(
+            sw))
+            .nodeStyle(NodeStyle.BLOCK)
+            .defaultOptions(node.options())
+            .build();
         tempLoader.save(node);
 
         // Build map of yaml-path → comment from the CommentedConfigurationNode tree

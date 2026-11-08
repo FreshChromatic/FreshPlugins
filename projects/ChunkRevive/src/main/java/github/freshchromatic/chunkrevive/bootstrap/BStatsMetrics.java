@@ -16,12 +16,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Anonymous, opt-out bStats reporting for aggregate configuration and operation usage. */
 final class BStatsMetrics implements Listener {
+
     private static final int PLUGIN_ID = 33087;
 
     private final ChunkRevivePlugin plugin;
-    private final AtomicInteger completedScans = new AtomicInteger();
-    private final AtomicInteger completedRegenerations = new AtomicInteger();
-    private final AtomicInteger completedResets = new AtomicInteger();
+    private final AtomicInteger     completedScans         = new AtomicInteger();
+    private final AtomicInteger     completedRegenerations = new AtomicInteger();
+    private final AtomicInteger     completedResets        = new AtomicInteger();
 
     private BStatsMetrics(ChunkRevivePlugin plugin) {
         this.plugin = plugin;
@@ -35,15 +36,17 @@ final class BStatsMetrics implements Listener {
         var metrics = new Metrics(plugin, PLUGIN_ID);
         metrics.addCustomChart(new SimplePie("database_type", reporter::databaseType));
         metrics.addCustomChart(new SingleLineChart("completed_scan_operations", reporter.completedScans::get));
-        metrics.addCustomChart(new SingleLineChart("completed_regenerate_operations", reporter.completedRegenerations::get));
+        metrics.addCustomChart(new SingleLineChart("completed_regenerate_operations",
+            reporter.completedRegenerations::get));
         metrics.addCustomChart(new SingleLineChart("completed_reset_operations", reporter.completedResets::get));
     }
 
     @EventHandler
     public void onOperationCompleted(OperationCompletedEvent event) {
         OperationSnapshot operation = event.operation();
-        if (operation.state() != OperationState.SUCCEEDED
-            && operation.state() != OperationState.PARTIALLY_SUCCEEDED) return;
+        if (operation.state() != OperationState.SUCCEEDED && operation.state() != OperationState.PARTIALLY_SUCCEEDED) {
+            return;
+        }
 
         OperationType type = operation.type();
         if (type == OperationType.SCAN_EXISTING_CHUNKS || type == OperationType.SCAN_BIOMES) {
@@ -57,7 +60,9 @@ final class BStatsMetrics implements Listener {
 
     private String databaseType() {
         String configuredType = plugin.getPluginConfig().database.type;
-        if (configuredType == null || configuredType.isBlank()) return "unknown";
+        if (configuredType == null || configuredType.isBlank()) {
+            return "unknown";
+        }
         return configuredType.trim().toLowerCase(Locale.ROOT);
     }
 }

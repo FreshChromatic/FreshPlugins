@@ -2,7 +2,6 @@ package github.freshchromatic.chunkrevive.infrastructure.persistence;
 
 import github.freshchromatic.chunkrevive.feature.structure.StructureGroup;
 import github.freshchromatic.freshlib.database.Database;
-import github.freshchromatic.freshlib.util.Logging;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -13,89 +12,104 @@ import java.util.UUID;
 
 /** SQL persistence dedicated to tracked structure groups. */
 final class SqlStructureStore {
-    private final Database database;
 
-    SqlStructureStore(Database database) {
+    private final Database                  database;
+    private final PersistenceConnectionLock connectionLock;
+
+    SqlStructureStore(Database database, PersistenceConnectionLock connectionLock) {
         this.database = database;
+        this.connectionLock = connectionLock;
     }
 
     void upsert(StructureGroup group) {
-        try (PreparedStatement update = database.getConnection().prepareStatement("""
+        synchronized (connectionLock) {
+            connectionLock.ensureOpen();
+            try (PreparedStatement update = database.getConnection().prepareStatement("""
                 UPDATE structure_groups SET
                     world=?, structure_id=?, min_chunk_x=?, max_chunk_x=?, min_chunk_z=?, max_chunk_z=?,
                     detected_at=?, next_refresh_at=?, protection_ticks=?, blocked=?
                 WHERE group_id=?
                 """)) {
-            bindMutableFields(update, group);
-            update.setString(11, group.groupId().toString());
-            if (update.executeUpdate() > 0) return;
-        } catch (SQLException failure) {
-            Logging.logger().severe("Failed to update structure group: " + failure.getMessage());
-            return;
-        }
+                bindMutableFields(update, group);
+                update.setString(11, group.groupId().toString());
+                if (update.executeUpdate() > 0) {
+                    return;
+                }
+            } catch (SQLException failure) {
+                throw new IllegalStateException("Failed to update structure group", failure);
+            }
 
-        try (PreparedStatement insert = database.getConnection().prepareStatement("""
+            try (PreparedStatement insert = database.getConnection().prepareStatement("""
                 INSERT INTO structure_groups
                     (group_id, world, structure_id, min_chunk_x, max_chunk_x, min_chunk_z, max_chunk_z,
                      detected_at, next_refresh_at, protection_ticks, blocked)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)
                 """)) {
-            insert.setString(1, group.groupId().toString());
-            insert.setString(2, group.world());
-            insert.setString(3, group.structureId());
-            insert.setInt(4, group.minChunkX());
-            insert.setInt(5, group.maxChunkX());
-            insert.setInt(6, group.minChunkZ());
-            insert.setInt(7, group.maxChunkZ());
-            insert.setLong(8, group.detectedAt());
-            insert.setLong(9, group.nextRefreshAt());
-            insert.setLong(10, group.protectionTicks());
-            insert.setInt(11, group.blocked() ? 1 : 0);
-            insert.executeUpdate();
-        } catch (SQLException failure) {
-            Logging.logger().severe("Failed to insert structure group: " + failure.getMessage());
+                insert.setString(1, group.groupId().toString());
+                insert.setString(2, group.world());
+                insert.setString(3, group.structureId());
+                insert.setInt(4, group.minChunkX());
+                insert.setInt(5, group.maxChunkX());
+                insert.setInt(6, group.minChunkZ());
+                insert.setInt(7, group.maxChunkZ());
+                insert.setLong(8, group.detectedAt());
+                insert.setLong(9, group.nextRefreshAt());
+                insert.setLong(10, group.protectionTicks());
+                insert.setInt(11, group.blocked() ? 1 : 0);
+                insert.executeUpdate();
+            } catch (SQLException failure) {
+                throw new IllegalStateException("Failed to insert structure group", failure);
+            }
         }
     }
 
     void updateProtection(UUID groupId, long ticks, boolean blocked) {
-        try (PreparedStatement statement = database.getConnection().prepareStatement(
+        synchronized (connectionLock) {
+            connectionLock.ensureOpen();
+            try (PreparedStatement statement = database.getConnection().prepareStatement(
                 "UPDATE structure_groups SET protection_ticks=?, blocked=? WHERE group_id=?")) {
-            statement.setLong(1, ticks);
-            statement.setInt(2, blocked ? 1 : 0);
-            statement.setString(3, groupId.toString());
-            statement.executeUpdate();
-        } catch (SQLException failure) {
-            Logging.logger().severe("Failed to update structure group protection: " + failure.getMessage());
+                statement.setLong(1, ticks);
+                statement.setInt(2, blocked ? 1 : 0);
+                statement.setString(3, groupId.toString());
+                statement.executeUpdate();
+            } catch (SQLException failure) {
+                throw new IllegalStateException("Failed to update structure group protection", failure);
+            }
         }
     }
 
     void updateNextRefresh(UUID groupId, long nextRefreshAt) {
-        try (PreparedStatement statement = database.getConnection().prepareStatement(
+        synchronized (connectionLock) {
+            connectionLock.ensureOpen();
+            try (PreparedStatement statement = database.getConnection().prepareStatement(
                 "UPDATE structure_groups SET next_refresh_at=? WHERE group_id=?")) {
-            statement.setLong(1, nextRefreshAt);
-            statement.setString(2, groupId.toString());
-            statement.executeUpdate();
-        } catch (SQLException failure) {
-            Logging.logger().severe("Failed to update structure group next refresh: " + failure.getMessage());
+                statement.setLong(1, nextRefreshAt);
+                statement.setString(2, groupId.toString());
+                statement.executeUpdate();
+            } catch (SQLException failure) {
+                throw new IllegalStateException("Failed to update structure group next refresh", failure);
+            }
         }
     }
 
     List<StructureGroup> loadAll() {
-        List<StructureGroup> result = new ArrayList<>();
-        try (ResultSet rows = database.executeQuery("SELECT * FROM structure_groups")) {
-            while (rows != null && rows.next()) {
-                result.add(new StructureGroup(
-                    UUID.fromString(rows.getString("group_id")), rows.getString("world"),
-                    rows.getString("structure_id"), rows.getInt("min_chunk_x"),
-                    rows.getInt("max_chunk_x"), rows.getInt("min_chunk_z"),
-                    rows.getInt("max_chunk_z"), rows.getLong("detected_at"),
-                    rows.getLong("next_refresh_at"), rows.getLong("protection_ticks"),
-                    rows.getInt("blocked") != 0));
+        synchronized (connectionLock) {
+            connectionLock.ensureOpen();
+            List<StructureGroup> result = new ArrayList<>();
+            try (PreparedStatement statement = database.getConnection().prepareStatement(
+                "SELECT * FROM structure_groups"); ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    result.add(new StructureGroup(UUID.fromString(rows.getString("group_id")), rows.getString("world"),
+                        rows.getString("structure_id"), rows.getInt("min_chunk_x"), rows.getInt("max_chunk_x"),
+                        rows.getInt("min_chunk_z"), rows.getInt("max_chunk_z"), rows.getLong("detected_at"),
+                        rows.getLong("next_refresh_at"), rows.getLong("protection_ticks"), rows.getInt(
+                            "blocked") != 0));
+                }
+            } catch (SQLException | IllegalArgumentException failure) {
+                throw new IllegalStateException("Failed to load structure groups", failure);
             }
-        } catch (SQLException failure) {
-            Logging.logger().severe("Failed to load structure groups: " + failure.getMessage());
+            return result;
         }
-        return result;
     }
 
     private static void bindMutableFields(PreparedStatement statement, StructureGroup group) throws SQLException {

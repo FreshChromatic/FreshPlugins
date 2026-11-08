@@ -1,5 +1,10 @@
 package github.freshchromatic.chunkrevive.nms.v26_3.terrain;
 
+import github.freshchromatic.chunkrevive.nms.ChunkArea;
+import github.freshchromatic.chunkrevive.nms.ContextChunkReadPolicy;
+import github.freshchromatic.chunkrevive.nms.TerrainGenerationFailure;
+import github.freshchromatic.chunkrevive.nms.TerrainGenerationCancellation;
+
 import github.freshchromatic.chunkrevive.nms.TerrainSettings;
 import github.freshchromatic.chunkrevive.nms.CarverStageCachePolicy;
 import github.freshchromatic.chunkrevive.nms.TerrainJfr;
@@ -45,16 +50,41 @@ import org.bukkit.World;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 
 /**
  * Generates overworld terrain in-memory via NMS ProtoChunks and writes the
@@ -62,10 +92,10 @@ import java.util.function.IntConsumer;
  */
 final class V26_3TerrainEngine {
 
-    private static JavaPlugin plugin;
-    private static volatile TerrainSettings.EntityExemptions entityExemptions =
-        new TerrainSettings.EntityExemptions(true, true, true, true, 32.0);
-    private static volatile boolean debugLogging;
+    private static JavaPlugin                                plugin;
+    private static volatile TerrainSettings.EntityExemptions entityExemptions = new TerrainSettings.EntityExemptions(
+        true, true, true, true, 32.0);
+    private static volatile boolean                          debugLogging;
 
     public static void init(JavaPlugin p) {
         plugin = p;
@@ -75,15 +105,15 @@ final class V26_3TerrainEngine {
         entityExemptions = cfg;
     }
 
-    private static volatile TerrainSettings.ThreadPool threadPoolConfig =
-        new TerrainSettings.ThreadPool("AUTO", 5, true, false);
+    private static volatile TerrainSettings.ThreadPool threadPoolConfig = new TerrainSettings.ThreadPool("AUTO", 5,
+        true, false);
 
     public static void setThreadPoolConfig(TerrainSettings.ThreadPool cfg) {
         threadPoolConfig = cfg;
     }
 
-    private static volatile TerrainSettings.MemorySafety memorySafetyConfig =
-        new TerrainSettings.MemorySafety(true, "AUTO");
+    private static volatile TerrainSettings.MemorySafety memorySafetyConfig = new TerrainSettings.MemorySafety(true,
+        "AUTO");
 
     public static void setMemorySafetyConfig(TerrainSettings.MemorySafety cfg) {
         memorySafetyConfig = cfg;
@@ -109,8 +139,7 @@ final class V26_3TerrainEngine {
         debugLogging = enabled;
     }
 
-    private static final java.util.Set<java.util.concurrent.ForkJoinPool> activePools =
-        java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final Set<ForkJoinPool> activePools = ConcurrentHashMap.newKeySet();
 
     public static int getActiveGenerationThreads() {
         int count = 0;
@@ -122,32 +151,28 @@ final class V26_3TerrainEngine {
 
     private record PoolKey(int parallelism, int priority, boolean daemon, boolean asyncMode) {}
 
-    private static volatile java.util.concurrent.ForkJoinPool sharedPool;
-    private static volatile PoolKey sharedPoolKey;
+    private static volatile ForkJoinPool sharedPool;
+    private static volatile PoolKey      sharedPoolKey;
 
     /**
      * Reuses one ForkJoinPool across regen calls instead of spinning a fresh pool up/down per call —
      * that churn was pure overhead for frequent single-chunk regens. Rebuilds only if the thread-pool
      * config actually changed since the pool was created.
      */
-    private static synchronized java.util.concurrent.ForkJoinPool getOrCreatePool(
-            int parallelism, int priority, boolean daemon, boolean asyncMode) {
+    private static synchronized ForkJoinPool getOrCreatePool(int parallelism, int priority, boolean daemon,
+        boolean asyncMode) {
         PoolKey key = new PoolKey(parallelism, priority, daemon, asyncMode);
         if (sharedPool == null || sharedPool.isShutdown() || !key.equals(sharedPoolKey)) {
             if (sharedPool != null) {
                 sharedPool.shutdown();
                 activePools.remove(sharedPool);
             }
-            sharedPool = new java.util.concurrent.ForkJoinPool(
-                parallelism,
-                fjPool -> {
-                    var t = java.util.concurrent.ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(fjPool);
-                    t.setDaemon(daemon);
-                    t.setPriority(priority);
-                    return t;
-                },
-                null, asyncMode
-            );
+            sharedPool = new ForkJoinPool(parallelism, fjPool -> {
+                var t = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(fjPool);
+                t.setDaemon(daemon);
+                t.setPriority(priority);
+                return t;
+            }, null, asyncMode);
             sharedPoolKey = key;
             activePools.add(sharedPool);
         }
@@ -176,17 +201,16 @@ final class V26_3TerrainEngine {
      * {@code ForkJoinPool.commonPool()} would tie up a common-pool worker for the duration,
      * which is also what virtual threads (see {@link #generate}) use as their carrier pool.
      */
-    private static final java.util.concurrent.ExecutorService ioExecutor =
-        java.util.concurrent.Executors.newThreadPerTaskExecutor(
-            Thread.ofVirtual().name("cr-terrain-io-", 0).factory());
+    private static final ExecutorService ioExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual()
+        .name("cr-terrain-io-", 0)
+        .factory());
 
     /**
      * ChunkMap#read is backed by MoonriseRegionFileIO and is genuinely asynchronous. Keep several
      * reads in flight so region I/O overlaps NBT decoding, while bounding the number of completed
      * raw tags that may wait for a generation worker.
      */
-    private static final java.util.concurrent.Semaphore CONTEXT_READ_SLOTS =
-        new java.util.concurrent.Semaphore(24);
+    private static final Semaphore CONTEXT_READ_SLOTS = new Semaphore(24);
 
     private static volatile BulkGenerationSession bulkSession;
 
@@ -207,31 +231,28 @@ final class V26_3TerrainEngine {
     /** Last exact generation scope that successfully reached disk and live apply. */
     private static volatile GenerationScope completedCarverScope;
 
-    private record GenerationScope(
-            java.util.UUID worldId, long seed, int generatorIdentity,
-            int randomStateIdentity, List<Long> targetChunks) {}
+    private record GenerationScope(UUID worldId, long seed, int generatorIdentity, int randomStateIdentity,
+        List<Long> targetChunks) {}
 
-    private record CarverStageKey(
-            java.util.UUID worldId, long seed, int generatorIdentity,
-            int randomStateIdentity, long chunkKey, GenerationScope contextualScope) {}
+    private record CarverStageKey(UUID worldId, long seed, int generatorIdentity, int randomStateIdentity,
+        long chunkKey, GenerationScope contextualScope) {}
 
-    private record StructureStartCacheKey(
-            java.util.UUID worldId, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
-            long seed, int generatorIdentity, int structureStateIdentity,
-            int templateManagerIdentity, long chunkKey) {}
+    private record StructureStartCacheKey(UUID worldId,
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension, long seed,
+        int generatorIdentity, int structureStateIdentity, int templateManagerIdentity, long chunkKey) {}
 
     private record CachedStructureStarts(List<CompoundTag> starts) {
+
         private CachedStructureStarts copy() {
             return new CachedStructureStarts(starts.stream().map(CompoundTag::copy).toList());
         }
     }
 
     private static final class StructureStartCache {
-        private final int maximumSize;
-        private final ConcurrentHashMap<StructureStartCacheKey, CachedStructureStarts> entries =
-            new ConcurrentHashMap<>();
-        private final java.util.concurrent.ConcurrentLinkedQueue<StructureStartCacheKey> insertionOrder =
-            new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+        private final int                                                              maximumSize;
+        private final ConcurrentHashMap<StructureStartCacheKey, CachedStructureStarts> entries        = new ConcurrentHashMap<>();
+        private final ConcurrentLinkedQueue<StructureStartCacheKey>                    insertionOrder = new ConcurrentLinkedQueue<>();
 
         private StructureStartCache(int maximumSize) {
             this.maximumSize = maximumSize;
@@ -243,11 +264,17 @@ final class V26_3TerrainEngine {
         }
 
         void put(StructureStartCacheKey key, CachedStructureStarts value) {
-            if (value.starts().isEmpty()) return;
-            if (entries.put(key, value.copy()) == null) insertionOrder.add(key);
+            if (value.starts().isEmpty()) {
+                return;
+            }
+            if (entries.put(key, value.copy()) == null) {
+                insertionOrder.add(key);
+            }
             while (entries.size() > maximumSize) {
                 StructureStartCacheKey oldest = insertionOrder.poll();
-                if (oldest == null) break;
+                if (oldest == null) {
+                    break;
+                }
                 entries.remove(oldest);
             }
         }
@@ -267,10 +294,10 @@ final class V26_3TerrainEngine {
     }
 
     private static final class TerrainStageCache {
-        private final int maximumSize;
-        private final ConcurrentHashMap<CarverStageKey, CompoundTag> entries = new ConcurrentHashMap<>();
-        private final java.util.concurrent.ConcurrentLinkedQueue<CarverStageKey> insertionOrder =
-            new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+        private final int                                            maximumSize;
+        private final ConcurrentHashMap<CarverStageKey, CompoundTag> entries        = new ConcurrentHashMap<>();
+        private final ConcurrentLinkedQueue<CarverStageKey>          insertionOrder = new ConcurrentLinkedQueue<>();
 
         private TerrainStageCache(int maximumSize) {
             this.maximumSize = maximumSize;
@@ -282,10 +309,14 @@ final class V26_3TerrainEngine {
         }
 
         void put(CarverStageKey key, CompoundTag value) {
-            if (entries.put(key, value.copy()) == null) insertionOrder.add(key);
+            if (entries.put(key, value.copy()) == null) {
+                insertionOrder.add(key);
+            }
             while (entries.size() > maximumSize) {
                 CarverStageKey oldest = insertionOrder.poll();
-                if (oldest == null) break;
+                if (oldest == null) {
+                    break;
+                }
                 entries.remove(oldest);
             }
         }
@@ -314,40 +345,37 @@ final class V26_3TerrainEngine {
         BulkGenerationSession session = bulkSession;
         bulkSession = null;
         if (session != null) {
-            Logging.logger().info("[NmsTerrainGenerator] Bulk session context cache: "
-                + session.hits.sum() + " hit(s), " + session.misses.sum() + " miss(es), "
-                + session.reads.size() + " retained position(s).");
+            Logging.logger().info("[NmsTerrainGenerator] Bulk session context cache: " + session.hits.sum()
+                + " hit(s), " + session.misses.sum() + " miss(es), " + session.reads.size() + " retained position(s).");
             session.reads.clear();
         }
     }
 
-    private record ContextReadKey(java.util.UUID worldId, long chunkKey) {}
+    private record ContextReadKey(UUID worldId, long chunkKey) {}
 
     private static final class BulkGenerationSession {
-        private static final int MAX_CONTEXT_ENTRIES = 2_048;
-        private final ConcurrentHashMap<ContextReadKey, CompletableFuture<java.util.Optional<CompoundTag>>> reads =
-            new ConcurrentHashMap<>();
-        private final java.util.concurrent.ConcurrentLinkedQueue<ContextReadKey> insertionOrder =
-            new java.util.concurrent.ConcurrentLinkedQueue<>();
-        private final java.util.concurrent.atomic.LongAdder hits = new java.util.concurrent.atomic.LongAdder();
-        private final java.util.concurrent.atomic.LongAdder misses = new java.util.concurrent.atomic.LongAdder();
-        private final boolean retainAllTerrainStages;
+
+        private static final int                                                                  MAX_CONTEXT_ENTRIES = 2_048;
+        private final ConcurrentHashMap<ContextReadKey, CompletableFuture<Optional<CompoundTag>>> reads               = new ConcurrentHashMap<>();
+        private final ConcurrentLinkedQueue<ContextReadKey>                                       insertionOrder      = new ConcurrentLinkedQueue<>();
+        private final LongAdder                                                                   hits                = new LongAdder();
+        private final LongAdder                                                                   misses              = new LongAdder();
+        private final boolean                                                                     retainAllTerrainStages;
 
         private BulkGenerationSession(boolean retainAllTerrainStages) {
             this.retainAllTerrainStages = retainAllTerrainStages;
         }
 
-        CompletableFuture<java.util.Optional<CompoundTag>> read(
-                java.util.UUID worldId, ChunkPos pos,
-                java.util.function.Supplier<CompletableFuture<java.util.Optional<CompoundTag>>> loader) {
+        CompletableFuture<Optional<CompoundTag>> read(UUID worldId, ChunkPos pos,
+            Supplier<CompletableFuture<Optional<CompoundTag>>> loader) {
             ContextReadKey key = new ContextReadKey(worldId, pos.pack());
-            CompletableFuture<java.util.Optional<CompoundTag>> existing = reads.get(key);
+            CompletableFuture<Optional<CompoundTag>> existing = reads.get(key);
             if (existing != null) {
                 hits.increment();
                 return existing;
             }
-            CompletableFuture<java.util.Optional<CompoundTag>> loaded = loader.get();
-            CompletableFuture<java.util.Optional<CompoundTag>> winner = reads.putIfAbsent(key, loaded);
+            CompletableFuture<Optional<CompoundTag>> loaded = loader.get();
+            CompletableFuture<Optional<CompoundTag>> winner = reads.putIfAbsent(key, loaded);
             if (winner != null) {
                 hits.increment();
                 return winner;
@@ -356,15 +384,16 @@ final class V26_3TerrainEngine {
             insertionOrder.add(key);
             trim();
             loaded.whenComplete((ignored, failure) -> {
-                if (failure != null) reads.remove(key, loaded);
+                if (failure != null) {
+                    reads.remove(key, loaded);
+                }
             });
             return loaded;
         }
 
-        void update(java.util.UUID worldId, ChunkPos pos, CompoundTag nbt) {
+        void update(UUID worldId, ChunkPos pos, CompoundTag nbt) {
             ContextReadKey key = new ContextReadKey(worldId, pos.pack());
-            reads.put(key,
-                CompletableFuture.completedFuture(java.util.Optional.of(nbt.copy())));
+            reads.put(key, CompletableFuture.completedFuture(Optional.of(nbt.copy())));
             insertionOrder.add(key);
             trim();
         }
@@ -372,7 +401,9 @@ final class V26_3TerrainEngine {
         private void trim() {
             while (reads.size() > MAX_CONTEXT_ENTRIES) {
                 ContextReadKey oldest = insertionOrder.poll();
-                if (oldest == null) return;
+                if (oldest == null) {
+                    return;
+                }
                 reads.remove(oldest);
             }
         }
@@ -380,7 +411,9 @@ final class V26_3TerrainEngine {
 
     public static int getResolvedParallelism() {
         int available = Runtime.getRuntime().availableProcessors();
-        String rawPara = threadPoolConfig.parallelism() != null ? threadPoolConfig.parallelism().trim().toUpperCase() : "AUTO";
+        String rawPara = threadPoolConfig.parallelism() != null ? threadPoolConfig.parallelism()
+            .trim()
+            .toUpperCase(Locale.ROOT) : "AUTO";
         int requested;
         switch (rawPara) {
             case "AUTO":
@@ -405,21 +438,30 @@ final class V26_3TerrainEngine {
 
     private static int memorySafeGenerationThreadLimit() {
         var safety = memorySafetyConfig;
-        if (!safety.enabled()) return 256;
+        if (!safety.enabled()) {
+            return 256;
+        }
         long heapGiB = Math.max(1L, Runtime.getRuntime().maxMemory() / (1024L * 1024L * 1024L));
         int available = Runtime.getRuntime().availableProcessors();
         // The retained ProtoChunk graph is bounded separately by active-batch and batch-size
         // admission. Worker count mainly controls short-lived noise/feature scratch allocations,
         // so deriving it directly from heapGiB (the old 4 GB -> 2 workers rule) needlessly left
         // modern CPUs mostly idle. Keep a modest heap-dependent ceiling plus half the logical CPUs.
-        int heapCap = heapGiB <= 4 ? 4 : heapGiB <= 8 ? 6 : 8;
+        int heapCap;
+        if (heapGiB <= 4) {
+            heapCap = 4;
+        } else if (heapGiB <= 8) {
+            heapCap = 6;
+        } else {
+            heapCap = 8;
+        }
         int cpuCap = Math.max(1, available / 2);
         int automatic = Math.max(1, Math.min(heapCap, cpuCap));
         return resolveSafetyCap(safety.maxGenerationThreads(), automatic);
     }
 
     private static int resolveSafetyCap(String raw, int automaticValue) {
-        String value = raw == null ? "AUTO" : raw.trim().toUpperCase(java.util.Locale.ROOT);
+        String value = raw == null ? "AUTO" : raw.trim().toUpperCase(Locale.ROOT);
         if (value.equals("CONFIG") || value.equals("IGNORE") || value.equals("UNLIMITED")) {
             return Integer.MAX_VALUE;
         }
@@ -438,8 +480,9 @@ final class V26_3TerrainEngine {
     private static boolean isExemptFromClear(org.bukkit.entity.Entity entity) {
         var cfg = entityExemptions;
 
-        if (cfg.keepRidden() && !entity.getPassengers().isEmpty()
-            && entity.getPassengers().stream().anyMatch(p -> p instanceof org.bukkit.entity.Player)) {
+        if (cfg.keepRidden() && !entity.getPassengers().isEmpty() && entity.getPassengers()
+            .stream()
+            .anyMatch(p -> p instanceof org.bukkit.entity.Player)) {
             return true;
         }
 
@@ -451,7 +494,8 @@ final class V26_3TerrainEngine {
         if (cfg.keepAllayAttracted() && entity instanceof org.bukkit.entity.Allay allay) {
             try {
                 var nmsAllay = ((org.bukkit.craftbukkit.entity.CraftAllay) allay).getHandle();
-                if (nmsAllay.getBrain().hasMemoryValue(net.minecraft.world.entity.ai.memory.MemoryModuleType.LIKED_PLAYER)) {
+                if (nmsAllay.getBrain().hasMemoryValue(
+                    net.minecraft.world.entity.ai.memory.MemoryModuleType.LIKED_PLAYER)) {
                     return true;
                 }
             } catch (Exception ignored) {
@@ -462,8 +506,8 @@ final class V26_3TerrainEngine {
         if (cfg.keepTamedPets() && entity instanceof org.bukkit.entity.Tameable tameable && tameable.isTamed()) {
             var owner = tameable.getOwner();
             if (owner instanceof org.bukkit.entity.Player ownerPlayer && ownerPlayer.isOnline()
-                && ownerPlayer.getWorld().equals(entity.getWorld())
-                && ownerPlayer.getLocation().distance(entity.getLocation()) <= cfg.tamedPetOwnerRadius()) {
+                && ownerPlayer.getWorld().equals(entity.getWorld()) && ownerPlayer.getLocation().distance(
+                    entity.getLocation()) <= cfg.tamedPetOwnerRadius()) {
                 return true;
             }
         }
@@ -481,14 +525,14 @@ final class V26_3TerrainEngine {
     }
 
     /** Vanilla/Paper FEATURES may write to the eight immediately-adjacent chunks. */
-    private static final int FEATURE_WRITE_RADIUS = 1;
+    private static final int FEATURE_WRITE_RADIUS     = 1;
     /** createReferences scans a 17x17 area around every FEATURES source. */
     private static final int STRUCTURE_CONTEXT_RADIUS = FEATURE_WRITE_RADIUS + 8;
-    private static final int DECORATION_STRIDE = FEATURE_WRITE_RADIUS * 2 + 1;
+    private static final int DECORATION_STRIDE        = FEATURE_WRITE_RADIUS * 2 + 1;
     // Some structure features (notably ancient cities) read two chunks away while
     // decorating. A radius of one causes Folia's unsafe-terrain-read guard to log
     // an error for every such lookup and can severely reduce bulk regen throughput.
-    private static final int FEATURE_CACHE_RADIUS = 2;
+    private static final int FEATURE_CACHE_RADIUS     = 2;
     /** Caps how far an extraContextBounds request (see {@link #generate}) can widen the context window. */
     private static final int MAX_EXTRA_CONTEXT_RADIUS = 48;
 
@@ -498,23 +542,12 @@ final class V26_3TerrainEngine {
     private static final int W_SERIALIZE  = 15;
     private static final int W_LIGHT      = 5;
 
-    private V26_3TerrainEngine() {}
+    private V26_3TerrainEngine() {
+    }
 
-    private record GenerationResult(
-        ServerLevel level,
-        List<ChunkPos> centerChunks,
-        List<ChunkPos> outerChunks,
-        Map<ChunkPos, ProtoChunk> chunks,
-        IntConsumer addWeight,
-        IntConsumer onProgress,
-        Consumer<String> onStage,
-        long seed,
-        int originCX,
-        int originCZ,
-        int gridOriginCX,
-        int gridOriginCZ,
-        GenerationScope generationScope
-    ) {}
+    private record GenerationResult(ServerLevel level, List<ChunkPos> centerChunks, List<ChunkPos> outerChunks,
+        Map<ChunkPos, ProtoChunk> chunks, IntConsumer addWeight, IntConsumer onProgress, Consumer<String> onStage,
+        long seed, int originCX, int originCZ, int gridOriginCX, int gridOriginCZ, GenerationScope generationScope) {}
 
     /**
      * Asynchronously generates terrain for the specified centerChunks
@@ -522,16 +555,13 @@ final class V26_3TerrainEngine {
      *
      * <p>The returned future completes after all chunk data has been flushed to disk.
      */
-    public static CompletableFuture<Void> generate(World world,
-                                                    java.util.Collection<ChunkPos> centerChunksInput,
-                                                    long seed,
-                                                    IntConsumer onProgress, Consumer<String> onStage,
-                                                    java.util.function.BooleanSupplier isCancelled) {
+    public static CompletableFuture<Void> generate(World world, Collection<ChunkPos> centerChunksInput, long seed,
+        IntConsumer onProgress, Consumer<String> onStage, BooleanSupplier isCancelled) {
         return generate(world, centerChunksInput, seed, onProgress, onStage, isCancelled, null);
     }
 
     /**
-     * @param extraContextBounds optional [minChunkX, maxChunkX, minChunkZ, maxChunkZ] (inclusive) that
+     * @param extraContextBounds optional inclusive chunk area that
      *                            gets unioned into the read-only context window around centerChunks.
      *                            Used so a single-chunk regen of a chunk that belongs to a known
      *                            structure can still see that structure's StructureStart (which may
@@ -539,53 +569,48 @@ final class V26_3TerrainEngine {
      *                            having to regenerate the whole structure. Chunks pulled in this way
      *                            are only ever read from disk for context — never written back.
      */
-    public static CompletableFuture<Void> generate(World world,
-                                                    java.util.Collection<ChunkPos> centerChunksInput,
-                                                    long seed,
-                                                    IntConsumer onProgress, Consumer<String> onStage,
-                                                    java.util.function.BooleanSupplier isCancelled,
-                                                    int[] extraContextBounds) {
+    public static CompletableFuture<Void> generate(World world, Collection<ChunkPos> centerChunksInput, long seed,
+        IntConsumer onProgress, Consumer<String> onStage, BooleanSupplier isCancelled, ChunkArea extraContextBounds) {
         long startTime = System.currentTimeMillis();
-        List<ChunkPos> centerChunks = new java.util.ArrayList<>(centerChunksInput);
+        List<ChunkPos> centerChunks = new ArrayList<>(centerChunksInput);
         if (centerChunks.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
-        Logging.logger().info("[NmsTerrainGenerator] Start generating terrain with seed=" + seed + " for " + centerChunks.size() + " chunks.");
+        Logging.logger().info("[NmsTerrainGenerator] Start generating terrain with seed=" + seed + " for "
+            + centerChunks.size() + " chunks.");
 
         CompletableFuture<GenerationResult> phase1Future = new CompletableFuture<>();
-        Thread.ofVirtual().name("cr-terrain-gen").start(() -> {
-            long startPhase1 = System.currentTimeMillis();
-            try {
-                if (isCancelled.getAsBoolean()) {
-                    throw new java.util.concurrent.CancellationException("Terrain generation cancelled");
+        Thread.ofVirtual()
+            .name("cr-terrain-gen")
+            .start(() -> {
+                long startPhase1 = System.currentTimeMillis();
+                try {
+                    if (isCancelled.getAsBoolean()) {
+                        throw new CancellationException("Terrain generation cancelled");
+                    }
+                    GenerationResult result = runAsyncInternal(world, centerChunks, seed, onProgress, onStage, isCancelled, extraContextBounds);
+                    Logging.logger().info("[NmsTerrainGenerator] Phase 1 (Async generation) completed in "
+                        + (System.currentTimeMillis() - startPhase1) + " ms.");
+                    phase1Future.complete(result);
+                } catch (Throwable t) {
+                    phase1Future.completeExceptionally(t);
                 }
-                GenerationResult result = runAsyncInternal(
-                    world, centerChunks, seed, onProgress, onStage, isCancelled, extraContextBounds);
-                Logging.logger().info("[NmsTerrainGenerator] Phase 1 (Async generation) completed in " + (System.currentTimeMillis() - startPhase1) + " ms.");
-                phase1Future.complete(result);
-            } catch (Throwable t) {
-                phase1Future.completeExceptionally(t);
-            }
-        });
-
-        return phase1Future
-            .thenCompose(result -> {
-                if (isCancelled.getAsBoolean()) {
-                    return CompletableFuture.failedFuture(new java.util.concurrent.CancellationException("Terrain generation cancelled"));
-                }
-                return serializeOnRegionThread(result, world)
-                    .thenRun(() -> {
-                        completedCarverScope = result.generationScope();
-                        Logging.logger().info("[NmsTerrainGenerator] Total generation & write completed in "
-                            + (System.currentTimeMillis() - startTime) + " ms.");
-                    });
             });
+
+        return phase1Future.thenCompose(result -> {
+            if (isCancelled.getAsBoolean()) {
+                return CompletableFuture.failedFuture(new CancellationException("Terrain generation cancelled"));
+            }
+            return serializeOnRegionThread(result, world, isCancelled).thenRun(() -> {
+                completedCarverScope = result.generationScope();
+                Logging.logger().info("[NmsTerrainGenerator] Total generation & write completed in "
+                    + (System.currentTimeMillis() - startTime) + " ms.");
+            });
+        });
     }
 
-    private static GenerationResult runAsyncInternal(World world, List<ChunkPos> centerChunks,
-                                                     long seed, IntConsumer onProgress, Consumer<String> onStage,
-                                                     java.util.function.BooleanSupplier isCancelled,
-                                                     int[] extraContextBounds) {
+    private static GenerationResult runAsyncInternal(World world, List<ChunkPos> centerChunks, long seed,
+        IntConsumer onProgress, Consumer<String> onStage, BooleanSupplier isCancelled, ChunkArea extraContextBounds) {
         ServerLevel nmsLevel = ((CraftWorld) world).getHandle();
         int parallelism = getResolvedParallelism();
 
@@ -612,30 +637,27 @@ final class V26_3TerrainEngine {
         final ChunkGeneratorStructureState structureState = chunkSource.getGeneratorState();
         long contextResolveMs = System.currentTimeMillis() - startPreparation;
 
-        java.util.Set<ChunkPos> centerChunksSet = new java.util.HashSet<>(centerChunks);
+        Set<ChunkPos> centerChunksSet = new HashSet<>(centerChunks);
 
         // A target contains FEATURES contributions originating in its 3x3 neighbourhood. Re-run
         // those source chunks in scratch memory, plus one clean writable ring around them. Only
         // centerChunks are serialized/applied, so the halo never changes live or on-disk neighbours.
         List<ChunkPos> featureSources = expandChunks(centerChunksSet, FEATURE_WRITE_RADIUS);
-        java.util.Set<ChunkPos> featureSourceSet = new java.util.HashSet<>(featureSources);
+        Set<ChunkPos> featureSourceSet = new HashSet<>(featureSources);
         List<ChunkPos> cleanBaseChunks = expandChunks(featureSourceSet, FEATURE_WRITE_RADIUS);
-        java.util.Set<ChunkPos> cleanBaseSet = new java.util.HashSet<>(cleanBaseChunks);
+        Set<ChunkPos> cleanBaseSet = new HashSet<>(cleanBaseChunks);
 
-        int carverRad = Math.max(
-            Math.max(getCarverRadius(), FEATURE_WRITE_RADIUS + FEATURE_CACHE_RADIUS),
+        int carverRad = Math.max(Math.max(getCarverRadius(), FEATURE_WRITE_RADIUS + FEATURE_CACHE_RADIUS),
             STRUCTURE_CONTEXT_RADIUS);
-        boolean oldNoiseAround = centerChunks.stream().anyMatch(pos ->
-            chunkMap.isOldChunkAround(pos, BlendingAnchorPolicy.OLD_NOISE_DISK_CONTEXT_RADIUS));
-        int diskContextRadius =
-            BlendingAnchorPolicy.requiredDiskContextRadius(carverRad, oldNoiseAround);
+        boolean oldNoiseAround = centerChunks.stream().anyMatch(pos -> chunkMap.isOldChunkAround(pos,
+            BlendingAnchorPolicy.OLD_NOISE_DISK_CONTEXT_RADIUS));
+        int diskContextRadius = BlendingAnchorPolicy.requiredDiskContextRadius(carverRad, oldNoiseAround);
 
         // Never materialise the bounding rectangle of an irregular marked area. A long L-shaped
         // explored region can contain hundreds of thousands of unmarked coordinates inside that
         // rectangle. Worldgen dependencies are local, so the exact morphological dilation of the
         // target set is both sufficient and dramatically smaller.
-        java.util.Set<ChunkPos> contextSet =
-            new java.util.HashSet<>(expandChunks(centerChunksSet, diskContextRadius));
+        Set<ChunkPos> contextSet = new HashSet<>(expandChunks(centerChunksSet, diskContextRadius));
 
         if (extraContextBounds != null) {
             int targetMinX = centerChunks.stream().mapToInt(ChunkPos::x).min().orElseThrow();
@@ -644,10 +666,10 @@ final class V26_3TerrainEngine {
             int targetMaxZ = centerChunks.stream().mapToInt(ChunkPos::z).max().orElseThrow();
             // Explicit structure context is exceptional and may be rectangular, but remains
             // independently clamped around the actual targets.
-            int boundMinCX = Math.max(extraContextBounds[0], targetMinX - MAX_EXTRA_CONTEXT_RADIUS);
-            int boundMaxCX = Math.min(extraContextBounds[1], targetMaxX + MAX_EXTRA_CONTEXT_RADIUS);
-            int boundMinCZ = Math.max(extraContextBounds[2], targetMinZ - MAX_EXTRA_CONTEXT_RADIUS);
-            int boundMaxCZ = Math.min(extraContextBounds[3], targetMaxZ + MAX_EXTRA_CONTEXT_RADIUS);
+            int boundMinCX = Math.max(extraContextBounds.minX(), targetMinX - MAX_EXTRA_CONTEXT_RADIUS);
+            int boundMaxCX = Math.min(extraContextBounds.maxX(), targetMaxX + MAX_EXTRA_CONTEXT_RADIUS);
+            int boundMinCZ = Math.max(extraContextBounds.minZ(), targetMinZ - MAX_EXTRA_CONTEXT_RADIUS);
+            int boundMaxCZ = Math.min(extraContextBounds.maxZ(), targetMaxZ + MAX_EXTRA_CONTEXT_RADIUS);
             for (int cx = boundMinCX; cx <= boundMaxCX; cx++) {
                 for (int cz = boundMinCZ; cz <= boundMaxCZ; cz++) {
                     contextSet.add(new ChunkPos(cx, cz));
@@ -657,27 +679,26 @@ final class V26_3TerrainEngine {
 
         Map<ChunkPos, ProtoChunk> chunks = new ConcurrentHashMap<>();
         Map<ChunkPos, ProtoChunkHolder> chunkHolders = new ConcurrentHashMap<>();
-        Map<RegionCacheKey, StaticCache2D<net.minecraft.server.level.GenerationChunkHolder>> regionCaches =
-            new ConcurrentHashMap<>();
-        java.util.concurrent.ConcurrentMap<Holder<Biome>, ProtoChunk> carverBiomeContexts =
-            new ConcurrentHashMap<>();
+        Map<RegionCacheKey, StaticCache2D<net.minecraft.server.level.GenerationChunkHolder>> regionCaches = new ConcurrentHashMap<>();
+        ConcurrentMap<Holder<Biome>, ProtoChunk> carverBiomeContexts = new ConcurrentHashMap<>();
         List<ChunkPos> contextPositions = contextSet.stream()
             .sorted(Comparator.comparingInt(ChunkPos::x).thenComparingInt(ChunkPos::z))
             .toList();
 
-        java.util.Set<ChunkPos> terrainCacheHits = ConcurrentHashMap.newKeySet();
+        Set<ChunkPos> terrainCacheHits = ConcurrentHashMap.newKeySet();
         int terrainCacheMisses = 0;
         int generatorIdentity = System.identityHashCode(generator);
         int randomStateIdentity = System.identityHashCode(randomState);
-        GenerationScope generationScope = new GenerationScope(
-            world.getUID(), seed, generatorIdentity, randomStateIdentity,
-            centerChunks.stream().map(ChunkPos::pack).sorted().toList());
+        GenerationScope generationScope = new GenerationScope(world.getUID(), seed, generatorIdentity,
+            randomStateIdentity, centerChunks.stream().map(ChunkPos::pack).sorted().toList());
         boolean exactScopeReplay = generationScope.equals(completedCarverScope);
         boolean cacheAdmissionEnabled = centerChunks.size() == 1 || bulkSession != null;
         for (ChunkPos pos : cleanBaseChunks) {
             boolean targetChunk = centerChunksSet.contains(pos);
-            if (!CarverStageCachePolicy.mayReuse(
-                    cacheAdmissionEnabled, oldNoiseAround, exactScopeReplay, targetChunk)) continue;
+            if (!CarverStageCachePolicy.mayReuse(cacheAdmissionEnabled, oldNoiseAround, exactScopeReplay,
+                targetChunk)) {
+                continue;
+            }
             // A target chunk's on-disk structure starts/references are authoritative. Reusing a
             // TERRAIN snapshot here can resurrect metadata produced by an earlier regeneration
             // (or by a different server/worldgen version), while the structure group still covers
@@ -686,36 +707,32 @@ final class V26_3TerrainEngine {
             //
             // Target snapshots are authoritative only for an immediately repeated identical scope.
             // Halo chunks remain context-free when no old-noise blending participates.
-            CarverStageKey cacheKey = new CarverStageKey(
-                world.getUID(), seed, generatorIdentity, randomStateIdentity, pos.pack(),
-                oldNoiseAround || targetChunk ? generationScope : null);
+            CarverStageKey cacheKey = new CarverStageKey(world.getUID(), seed, generatorIdentity, randomStateIdentity,
+                pos.pack(), oldNoiseAround || targetChunk ? generationScope : null);
             CompoundTag cached = terrainStageCache.get(cacheKey);
             if (cached == null) {
                 terrainCacheMisses++;
                 continue;
             }
             try {
-                SerializableChunkData data = SerializableChunkData.parse(
-                    nmsLevel, nmsLevel.palettedContainerFactory(), cached);
-                ChunkAccess loaded = data == null ? null : data.read(
-                    nmsLevel, nmsLevel.getPoiManager(), null, pos);
-                if (!(loaded instanceof ProtoChunk proto)
-                    || !proto.getPersistedStatus().isOrAfter(ChunkStatus.TERRAIN)
+                SerializableChunkData data = SerializableChunkData.parse(nmsLevel, nmsLevel.palettedContainerFactory(),
+                    cached);
+                ChunkAccess loaded = data == null ? null : data.read(nmsLevel, nmsLevel.getPoiManager(), null, pos);
+                if (!(loaded instanceof ProtoChunk proto) || !proto.getPersistedStatus().isOrAfter(ChunkStatus.TERRAIN)
                     || proto.getPersistedStatus().isOrAfter(ChunkStatus.FEATURES)) {
                     throw new IllegalStateException("snapshot is not exactly a pre-FEATURES terrain chunk");
                 }
                 chunks.put(pos, proto);
                 terrainCacheHits.add(pos);
-            } catch (Throwable invalidSnapshot) {
+            } catch (Exception | LinkageError invalidSnapshot) {
                 terrainStageCache.remove(cacheKey);
                 terrainCacheMisses++;
-                Logging.logger().warning("[NmsTerrainGenerator] Discarded invalid TERRAIN cache entry for "
-                    + pos + ": " + invalidSnapshot.getMessage());
+                Logging.logger().warning("[NmsTerrainGenerator] Discarded invalid TERRAIN cache entry for " + pos + ": "
+                    + invalidSnapshot.getMessage());
             }
         }
         final int terrainCacheMissCount = terrainCacheMisses;
-        final String terrainCachePreparationSummary = oldNoiseAround && !exactScopeReplay
-            ? "warming(old-noise scope)"
+        final String terrainCachePreparationSummary = oldNoiseAround && !exactScopeReplay ? "warming(old-noise scope)"
             : terrainCacheHits.size() + " hit/" + terrainCacheMissCount + " miss";
 
         for (ChunkPos pos : centerChunks) {
@@ -724,18 +741,19 @@ final class V26_3TerrainEngine {
             chunks.putIfAbsent(pos, newProtoChunk(pos, nmsLevel));
         }
 
-        int totalOuter   = contextPositions.size();
-        int centerTotal  = centerChunks.size();
-        int totalWeight = totalOuter * W_OUTER
-                       + centerTotal * (W_CARVER + W_DECORATION + W_SERIALIZE + W_LIGHT);
+        int totalOuter = contextPositions.size();
+        int centerTotal = centerChunks.size();
+        int totalWeight = totalOuter * W_OUTER + centerTotal * (W_CARVER + W_DECORATION + W_SERIALIZE + W_LIGHT);
 
         AtomicInteger accumulated = new AtomicInteger(0);
-        AtomicInteger lastPercent  = new AtomicInteger(0);
+        AtomicInteger lastPercent = new AtomicInteger(0);
 
         IntConsumer addWeight = weight -> {
             int current = accumulated.addAndGet(weight);
             int percent = (int) ((long) current * 100 / totalWeight);
-            if (percent > 99) percent = 99;
+            if (percent > 99) {
+                percent = 99;
+            }
             int last = lastPercent.get();
             while (percent > last) {
                 if (lastPercent.compareAndSet(last, percent)) {
@@ -751,110 +769,104 @@ final class V26_3TerrainEngine {
         var structTemplateManager = nmsLevel.getStructureTemplateManager();
         var dimension = nmsLevel.dimension();
 
-        java.util.Set<ChunkPos> diskLoaded = ConcurrentHashMap.newKeySet();
-        java.util.Set<ChunkPos> savedBiomesLoaded = ConcurrentHashMap.newKeySet();
-        java.util.Set<ChunkPos> savedBlendingDataLoaded = ConcurrentHashMap.newKeySet();
-        java.util.Set<ChunkPos> savedRetrogenLoaded = ConcurrentHashMap.newKeySet();
+        Set<ChunkPos> diskLoaded = ConcurrentHashMap.newKeySet();
+        Set<ChunkPos> savedBiomesLoaded = ConcurrentHashMap.newKeySet();
+        Set<ChunkPos> savedBlendingDataLoaded = ConcurrentHashMap.newKeySet();
+        Set<ChunkPos> savedRetrogenLoaded = ConcurrentHashMap.newKeySet();
         Map<ChunkPos, ProtoChunk> originalBlendingChunks = new ConcurrentHashMap<>();
         // Read-only context may retain real decorated terrain. The clean base set is rebuilt through
         // TERRAIN in scratch memory while preserving its persisted structure starts/references.
-        java.util.Set<ChunkPos> fullTerrainLoaded = ConcurrentHashMap.newKeySet();
+        Set<ChunkPos> fullTerrainLoaded = ConcurrentHashMap.newKeySet();
 
         // Read context chunks through the server's chunk I/O path. This is slower than opening
         // RegionFile handles directly, but it is the only path coordinated with a live server's
         // concurrent region writes and guarantees that the returned NBT belongs to this position.
         List<CompletableFuture<Void>> contextReadFutures = new ArrayList<>();
         long contextReadStarted = System.nanoTime();
-        var contextDecodeWork = new java.util.concurrent.atomic.LongAdder();
+        var contextDecodeWork = new LongAdder();
         for (ChunkPos pos : contextPositions) {
             // Read targets too. We discard their blocks below, but preserve their saved structure
             // starts and references so regeneration reproduces the structure that owns the marked
             // range instead of generating a potentially different layout and clipping it to that
             // old range.
-            if (terrainCacheHits.contains(pos)) continue;
+            if (terrainCacheHits.contains(pos)) {
+                continue;
+            }
             if (isCancelled.getAsBoolean()) {
-                throw new java.util.concurrent.CancellationException("Task cancelled");
+                throw new CancellationException("Task cancelled");
             }
             CONTEXT_READ_SLOTS.acquireUninterruptibly();
             BulkGenerationSession session = bulkSession;
-            CompletableFuture<java.util.Optional<CompoundTag>> nbtRead = session == null
-                ? chunkMap.read(pos)
+            CompletableFuture<Optional<CompoundTag>> nbtRead = session == null ? chunkMap.read(pos)
                 : session.read(world.getUID(), pos, () -> chunkMap.read(pos));
-            CompletableFuture<Void> readFuture = nbtRead.thenAcceptAsync(nbtOpt -> {
-                long decodeStarted = System.nanoTime();
-                try {
-                    if (nbtOpt.isEmpty()) return;
-                    // upgradeChunkTag may rewrite its input. Session entries are shared by several
-                    // tiles, so every consumer gets an independent mutable copy.
-                    CompoundTag rawNbt = nbtOpt.get().copy();
-                    int dataVersion = NbtUtils.getDataVersion(rawNbt);
-                    CompoundTag upgradedNbt;
-                    if (dataVersion == net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version()) {
-                        upgradedNbt = rawNbt;
-                    } else {
-                        upgradedNbt = chunkMap.upgradeChunkTag(rawNbt);
-                    }
-                    SerializableChunkData data = SerializableChunkData.parse(
-                        nmsLevel, nmsLevel.palettedContainerFactory(), upgradedNbt);
-                    if (data != null) {
-                        ChunkAccess loaded = data.read(
-                            nmsLevel,
-                            nmsLevel.getPoiManager(),
-                            null, // regionInfo
-                            pos
-                        );
-                        if (loaded instanceof ProtoChunk loadedProto) {
-                            if (cleanBaseSet.contains(pos)) {
-                                boolean historicalContext =
-                                    BlendingAnchorPolicy.preserveHistoricalTerrainMetadata(
-                                        centerChunksSet.contains(pos));
-                                ProtoChunk pc = historicalContext
-                                    ? new ProtoChunk(
-                                        pos,
-                                        loadedProto.getUpgradeData().copy(),
-                                        nmsLevel,
-                                        nmsLevel.palettedContainerFactory(),
-                                        loadedProto.getBlendingData()
-                                    )
-                                    : newProtoChunk(pos, nmsLevel);
-                                if (historicalContext) {
-                                    pc.setBelowZeroRetrogen(loadedProto.getBelowZeroRetrogen());
-                                    if (loadedProto.getBlendingData() != null) {
-                                        savedBlendingDataLoaded.add(pos);
-                                        originalBlendingChunks.put(pos, loadedProto);
-                                    }
-                                    if (loadedProto.getBelowZeroRetrogen() != null) {
-                                        savedRetrogenLoaded.add(pos);
-                                    }
-                                }
-                                pc.setAllStarts(loadedProto.getAllStarts());
-                                pc.setAllReferences(loadedProto.getAllReferences());
-                                if (historicalContext
-                                    && loadedProto.getPersistedStatus().isOrAfter(ChunkStatus.BIOMES)) {
-                                    copyBiomePalettes(loadedProto, pc);
-                                    savedBiomesLoaded.add(pos);
-                                }
-                                pc.setPersistedStatus(ChunkStatus.STRUCTURE_REFERENCES);
-                                chunks.put(pos, pc);
-                            } else if (loadedProto.getPersistedStatus().isOrAfter(ChunkStatus.FEATURES)) {
-                                chunks.put(pos, loadedProto);
-                                fullTerrainLoaded.add(pos);
-                            } else {
-                                ProtoChunk pc = newProtoChunk(pos, nmsLevel);
-                                pc.setAllStarts(loadedProto.getAllStarts());
-                                pc.setAllReferences(loadedProto.getAllReferences());
-                                pc.setPersistedStatus(ChunkStatus.STRUCTURE_REFERENCES);
-                                chunks.put(pos, pc);
-                            }
-                            diskLoaded.add(pos);
+            CompletableFuture<Void> readFuture = ContextChunkReadPolicy.continueAfterNonFatalReadFailure(
+                nbtRead.thenAcceptAsync(nbtOpt -> {
+                    long decodeStarted = System.nanoTime();
+                    try {
+                        if (nbtOpt.isEmpty()) {
+                            return;
                         }
+                        // upgradeChunkTag may rewrite its input. Session entries are shared by several
+                        // tiles, so every consumer gets an independent mutable copy.
+                        CompoundTag rawNbt = nbtOpt.get().copy();
+                        int dataVersion = NbtUtils.getDataVersion(rawNbt);
+                        CompoundTag upgradedNbt;
+                        if (dataVersion == net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version()) {
+                            upgradedNbt = rawNbt;
+                        } else {
+                            upgradedNbt = chunkMap.upgradeChunkTag(rawNbt);
+                        }
+                        SerializableChunkData data = SerializableChunkData.parse(nmsLevel,
+                            nmsLevel.palettedContainerFactory(), upgradedNbt);
+                        if (data != null) {
+                            ChunkAccess loaded = data.read(nmsLevel, nmsLevel.getPoiManager(), null, // regionInfo
+                                pos);
+                            if (loaded instanceof ProtoChunk loadedProto) {
+                                if (cleanBaseSet.contains(pos)) {
+                                    boolean historicalContext = BlendingAnchorPolicy.preserveHistoricalTerrainMetadata(
+                                        centerChunksSet.contains(pos));
+                                    ProtoChunk pc = historicalContext ? new ProtoChunk(pos,
+                                        loadedProto.getUpgradeData().copy(), nmsLevel,
+                                        nmsLevel.palettedContainerFactory(), loadedProto.getBlendingData())
+                                        : newProtoChunk(pos, nmsLevel);
+                                    if (historicalContext) {
+                                        pc.setBelowZeroRetrogen(loadedProto.getBelowZeroRetrogen());
+                                        if (loadedProto.getBlendingData() != null) {
+                                            savedBlendingDataLoaded.add(pos);
+                                            originalBlendingChunks.put(pos, loadedProto);
+                                        }
+                                        if (loadedProto.getBelowZeroRetrogen() != null) {
+                                            savedRetrogenLoaded.add(pos);
+                                        }
+                                    }
+                                    pc.setAllStarts(loadedProto.getAllStarts());
+                                    pc.setAllReferences(loadedProto.getAllReferences());
+                                    if (historicalContext && loadedProto.getPersistedStatus().isOrAfter(
+                                        ChunkStatus.BIOMES)) {
+                                        copyBiomePalettes(loadedProto, pc);
+                                        savedBiomesLoaded.add(pos);
+                                    }
+                                    pc.setPersistedStatus(ChunkStatus.STRUCTURE_REFERENCES);
+                                    chunks.put(pos, pc);
+                                } else if (loadedProto.getPersistedStatus().isOrAfter(ChunkStatus.FEATURES)) {
+                                    chunks.put(pos, loadedProto);
+                                    fullTerrainLoaded.add(pos);
+                                } else {
+                                    ProtoChunk pc = newProtoChunk(pos, nmsLevel);
+                                    pc.setAllStarts(loadedProto.getAllStarts());
+                                    pc.setAllReferences(loadedProto.getAllReferences());
+                                    pc.setPersistedStatus(ChunkStatus.STRUCTURE_REFERENCES);
+                                    chunks.put(pos, pc);
+                                }
+                                diskLoaded.add(pos);
+                            }
+                        }
+                    } catch (Exception ignored) {
+                        // Fallback to normal structure generation if read/parse fails
+                    } finally {
+                        contextDecodeWork.add(System.nanoTime() - decodeStarted);
                     }
-                } catch (Exception ignored) {
-                    // Fallback to normal structure generation if read/parse fails
-                } finally {
-                    contextDecodeWork.add(System.nanoTime() - decodeStarted);
-                }
-            }, pool).exceptionally(ex -> null).whenComplete((ignored, ex) -> CONTEXT_READ_SLOTS.release());
+                }, pool)).whenComplete((ignored, ex) -> CONTEXT_READ_SLOTS.release());
             contextReadFutures.add(readFuture);
         }
         CompletableFuture.allOf(contextReadFutures.toArray(new CompletableFuture[0])).join();
@@ -869,51 +881,51 @@ final class V26_3TerrainEngine {
         long preparationMs = System.currentTimeMillis() - startPreparation;
         Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Preparation completed in " + preparationMs
             + " ms (context resolve/state=" + contextResolveMs + " ms, context=" + contextPositions.size()
-            + ", disk-loaded=" + diskLoaded.size() + ", carvers-cache="
-            + terrainCachePreparationSummary + ", saved-biomes=" + savedBiomesLoaded.size()
-            + ", blending-data=" + savedBlendingDataLoaded.size()
-            + ", retrogen=" + savedRetrogenLoaded.size()
-            + ", context-read=" + contextReadWallMs + " ms wall/"
-            + nanosToMillis(contextDecodeWork) + " ms decode-worker across "
-            + contextReadFutures.size() + " read(s)).");
+            + ", disk-loaded=" + diskLoaded.size() + ", carvers-cache=" + terrainCachePreparationSummary
+            + ", saved-biomes=" + savedBiomesLoaded.size() + ", blending-data=" + savedBlendingDataLoaded.size()
+            + ", retrogen=" + savedRetrogenLoaded.size() + ", context-read=" + contextReadWallMs + " ms wall/"
+            + nanosToMillis(contextDecodeWork) + " ms decode-worker across " + contextReadFutures.size()
+            + " read(s)).");
         GcSnapshot preparationGcFinished = gcSnapshot();
         TerrainJfr.endPhase(preparationJfr, contextReadFutures.size(), contextDecodeWork.sum(),
-            preparationGcFinished.collections() - preparationGcStarted.collections(),
-            preparationGcFinished.millis() - preparationGcStarted.millis(), true);
+            preparationGcFinished.collections() - preparationGcStarted.collections(), preparationGcFinished.millis()
+                - preparationGcStarted.millis(), true);
 
-        java.util.Set<ChunkPos> structureStartsToRefresh =
-            collectStructureStartsToRefresh(centerChunksSet, featureSources, chunks);
+        Set<ChunkPos> structureStartsToRefresh = collectStructureStartsToRefresh(centerChunksSet, featureSources,
+            chunks);
 
         List<ProtoChunk> needsStructures = chunksToGen.stream()
-            .filter(pc -> structureStartsToRefresh.contains(pc.getPos())
-                || (!diskLoaded.contains(pc.getPos()) && !terrainCacheHits.contains(pc.getPos())))
+            .filter(pc -> structureStartsToRefresh.contains(pc.getPos()) || (!diskLoaded.contains(pc.getPos()) && !terrainCacheHits.contains(pc.getPos())))
             .toList();
 
         long startStructures = System.currentTimeMillis();
         GcSnapshot structureGcStarted = gcSnapshot();
         var structureJfr = TerrainJfr.beginPhase("structure-starts", centerChunks.size());
-        var structureWork = new java.util.concurrent.atomic.LongAdder();
-        var structureTimings = new java.util.concurrent.ConcurrentLinkedQueue<ChunkTiming>();
-        var structureCacheHits = new java.util.concurrent.atomic.LongAdder();
-        var structureCacheMisses = new java.util.concurrent.atomic.LongAdder();
+        var structureWork = new LongAdder();
+        var structureTimings = new ConcurrentLinkedQueue<ChunkTiming>();
+        var structureCacheHits = new LongAdder();
+        var structureCacheMisses = new LongAdder();
         var structureRegistry = reg.lookupOrThrow(Registries.STRUCTURE);
         boolean structureCacheEnabled = generator instanceof net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
         runBatch(needsStructures, pc -> {
             long structureStarted = System.nanoTime();
             long structureCpuStarted = currentThreadCpuNanos();
-            String timingDetail = centerChunksSet.contains(pc.getPos())
-                ? "target"
-                : structureStartsToRefresh.contains(pc.getPos()) ? "referenced-start" : "missing-context";
-            var jfrEvent = TerrainJfr.beginTask(
-                "STRUCTURE_STARTS", pc.getPos().x(), pc.getPos().z(), timingDetail);
+            String timingDetail;
+            if (centerChunksSet.contains(pc.getPos())) {
+                timingDetail = "target";
+            } else if (structureStartsToRefresh.contains(pc.getPos())) {
+                timingDetail = "referenced-start";
+            } else {
+                timingDetail = "missing-context";
+            }
+            var jfrEvent = TerrainJfr.beginTask("STRUCTURE_STARTS", pc.getPos().x(), pc.getPos().z(), timingDetail);
             boolean succeeded = false;
             String structureResult = "";
             try {
                 ChunkStatus previousStatus = pc.getPersistedStatus();
-                StructureStartCacheKey structureCacheKey = new StructureStartCacheKey(
-                    world.getUID(), dimension, seed, System.identityHashCode(generator),
-                    System.identityHashCode(structureState), System.identityHashCode(structTemplateManager),
-                    pc.getPos().pack());
+                StructureStartCacheKey structureCacheKey = new StructureStartCacheKey(world.getUID(), dimension, seed,
+                    System.identityHashCode(generator), System.identityHashCode(structureState),
+                    System.identityHashCode(structTemplateManager), pc.getPos().pack());
                 if (structureStartsToRefresh.contains(pc.getPos())) {
                     pc.setAllStarts(new HashMap<>());
                     pc.setAllReferences(new HashMap<>());
@@ -923,8 +935,7 @@ final class V26_3TerrainEngine {
                     CachedStructureStarts cached = structureStartCache.get(structureCacheKey);
                     if (cached != null) {
                         try {
-                            pc.setAllStarts(restoreStructureStarts(
-                                cached, nmsLevel, seed, pc.getPos()));
+                            pc.setAllStarts(restoreStructureStarts(cached, nmsLevel, seed, pc.getPos()));
                             pc.setAllReferences(new HashMap<>());
                             structureCacheHits.increment();
                             structureCacheHit = true;
@@ -932,18 +943,21 @@ final class V26_3TerrainEngine {
                             structureStartCache.remove(structureCacheKey);
                         }
                     }
-                    if (!structureCacheHit) structureCacheMisses.increment();
+                    if (!structureCacheHit) {
+                        structureCacheMisses.increment();
+                    }
                 }
                 if (!structureCacheHit) {
                     generator.createStructures(reg, structureState, structMgr, pc, structTemplateManager, dimension);
                     if (structureCacheEnabled) {
-                        structureStartCache.put(structureCacheKey,
-                            snapshotStructureStarts(pc, nmsLevel));
+                        structureStartCache.put(structureCacheKey, snapshotStructureStarts(pc, nmsLevel));
                     }
                 }
-                structureResult = "cache=" + (structureCacheEnabled
-                    ? structureCacheHit ? "hit" : "miss" : "disabled") + "; "
-                    + summarizeStructureStarts(pc, structureRegistry);
+                String cacheResult = structureCacheHit ? "hit" : "miss";
+                if (!structureCacheEnabled) {
+                    cacheResult = "disabled";
+                }
+                structureResult = "cache=" + cacheResult + "; " + summarizeStructureStarts(pc, structureRegistry);
                 if (!previousStatus.isOrAfter(ChunkStatus.STRUCTURE_STARTS)) {
                     pc.setPersistedStatus(ChunkStatus.STRUCTURE_STARTS);
                 }
@@ -952,8 +966,8 @@ final class V26_3TerrainEngine {
                 long elapsed = System.nanoTime() - structureStarted;
                 long cpuElapsed = elapsedThreadCpuNanos(structureCpuStarted);
                 structureWork.add(elapsed);
-                String completedDetail = structureResult.isEmpty()
-                    ? timingDetail : timingDetail + "; " + structureResult;
+                String completedDetail = structureResult.isEmpty() ? timingDetail
+                    : timingDetail + "; " + structureResult;
                 structureTimings.add(new ChunkTiming(pc.getPos(), elapsed, cpuElapsed, completedDetail));
                 TerrainJfr.endTask(jfrEvent, cpuElapsed, succeeded, structureResult);
             }
@@ -964,32 +978,37 @@ final class V26_3TerrainEngine {
             StringBuilder structLog = new StringBuilder();
             for (ProtoChunk pc : chunksToGen) {
                 var starts = pc.getAllStarts();
-                if (starts.isEmpty()) continue;
+                if (starts.isEmpty()) {
+                    continue;
+                }
                 chunksWithStarts++;
                 totalStarts += starts.size();
                 for (var entry : starts.entrySet()) {
-                    if (!entry.getValue().isValid()) continue;
+                    if (!entry.getValue().isValid()) {
+                        continue;
+                    }
                     var key = structureRegistry.getKey(entry.getKey());
-                    structLog.append("\n  ").append(key)
-                             .append(" @ chunk (").append(pc.getPos().x()).append(", ").append(pc.getPos().z()).append(")");
+                    structLog.append("\n  ")
+                        .append(key)
+                        .append(" @ chunk (")
+                        .append(pc.getPos().x())
+                        .append(", ")
+                        .append(pc.getPos().z())
+                        .append(")");
                 }
             }
-            Logging.logger().info("[NmsTerrainGenerator] createStructures: " + chunksWithStarts
-                + " chunk(s) received " + totalStarts + " structure start(s) total" + structLog);
+            Logging.logger().info("[NmsTerrainGenerator] createStructures: " + chunksWithStarts + " chunk(s) received "
+                + totalStarts + " structure start(s) total" + structLog);
         }
         Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Step 7a (STRUCTURE_STARTS) completed in "
-            + (System.currentTimeMillis() - startStructures) + " ms wall (worker-ms="
-            + nanosToMillis(structureWork) + ", tasks=" + needsStructures.size()
-            + ", latency=" + timingDistribution(structureTimings)
-            + ", structure-start-cache=" + structureCacheHits.sum() + " hit/"
-            + structureCacheMisses.sum() + " miss/" + structureStartCache.size() + " retained"
-            + ", " + gcDelta(structureGcStarted, gcSnapshot())
+            + (System.currentTimeMillis() - startStructures) + " ms wall (worker-ms=" + nanosToMillis(structureWork)
+            + ", tasks=" + needsStructures.size() + ", latency=" + timingDistribution(structureTimings)
+            + ", structure-start-cache=" + structureCacheHits.sum() + " hit/" + structureCacheMisses.sum() + " miss/"
+            + structureStartCache.size() + " retained" + ", " + gcDelta(structureGcStarted, gcSnapshot())
             + ", context disk-loaded=" + diskLoaded.size() + ").");
         GcSnapshot structureGcFinished = gcSnapshot();
-        TerrainJfr.endPhase(structureJfr,
-            needsStructures.size(), structureWork.sum(),
-            structureGcFinished.collections() - structureGcStarted.collections(),
-            structureGcFinished.millis() - structureGcStarted.millis(), true);
+        TerrainJfr.endPhase(structureJfr, needsStructures.size(), structureWork.sum(), structureGcFinished.collections()
+            - structureGcStarted.collections(), structureGcFinished.millis() - structureGcStarted.millis(), true);
         logSlowChunkTimings("createStructures", structureTimings, 5, 50);
 
         long startReferences = System.currentTimeMillis();
@@ -997,29 +1016,21 @@ final class V26_3TerrainEngine {
         // Only chunks used as FEATURES sources need their own reference map. createReferences
         // scans the wider context for structure starts; running it for every distant context-only
         // chunk was pure O(context * 17²) work on large structure bounds.
-        List<ProtoChunk> needsReferences = featureSources.stream()
-            .map(chunks::get)
-            .filter(java.util.Objects::nonNull)
-            .toList();
+        List<ProtoChunk> needsReferences = featureSources.stream().map(chunks::get).filter(Objects::nonNull).toList();
 
         runBatch(needsReferences, pc -> {
             ChunkStatus previousStatus = pc.getPersistedStatus();
             pc.setAllReferences(new HashMap<>());
-            var region = new SeededWorldGenRegion(
-                nmsLevel,
-                buildCache(pc.getPos(), 1, chunks, chunkHolders, regionCaches, nmsLevel, biomeSource, randomState),
-                refStep, pc,
-                seed, biomeSource, randomState, chunks, carverBiomeContexts);
-            generator.createReferences(
-                region,
-                nmsLevel.structureManager().forWorldGenRegion(region),
-                pc
-            );
+            var region = new SeededWorldGenRegion(nmsLevel, buildCache(pc.getPos(), 1, chunks, chunkHolders,
+                regionCaches, nmsLevel, biomeSource, randomState), refStep, pc, seed, biomeSource, randomState, chunks,
+                carverBiomeContexts);
+            generator.createReferences(region, nmsLevel.structureManager().forWorldGenRegion(region), pc);
             if (!previousStatus.isOrAfter(ChunkStatus.STRUCTURE_REFERENCES)) {
                 pc.setPersistedStatus(ChunkStatus.STRUCTURE_REFERENCES);
             }
         }, pool, isCancelled);
-        Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Step 3b (STRUCTURE_REFERENCES) completed in " + (System.currentTimeMillis() - startReferences) + " ms.");
+        Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Step 3b (STRUCTURE_REFERENCES) completed in "
+            + (System.currentTimeMillis() - startReferences) + " ms.");
 
         onStage.accept("terrain_pipeline");
         long pipelineStarted = System.currentTimeMillis();
@@ -1030,10 +1041,10 @@ final class V26_3TerrainEngine {
         var terrainStep = ChunkPyramid.GENERATION_PYRAMID.getStepTo(ChunkStatus.TERRAIN);
         var featureStep = ChunkPyramid.GENERATION_PYRAMID.getStepTo(ChunkStatus.FEATURES);
 
-        var biomeWork = new java.util.concurrent.atomic.LongAdder();
+        var biomeWork = new LongAdder();
 
-        var terrainWork = new java.util.concurrent.atomic.LongAdder();
-        var featureWork = new java.util.concurrent.atomic.LongAdder();
+        var terrainWork = new LongAdder();
+        var featureWork = new LongAdder();
         Map<ChunkPos, CompletableFuture<Void>> biomeFutures = new HashMap<>();
 
         Map<ChunkPos, CompletableFuture<Void>> terrainFutures = new HashMap<>();
@@ -1043,7 +1054,7 @@ final class V26_3TerrainEngine {
         // additional ring because noise and surface biome sampling can cross a quart boundary.
         // Distant structure context remains at STRUCTURE_STARTS/REFERENCES and is still visible to
         // StructureManager during FEATURES without generating irrelevant terrain for it.
-        java.util.Set<ChunkPos> biomeWorkSet = new java.util.HashSet<>(expandChunks(cleanBaseSet, 1));
+        Set<ChunkPos> biomeWorkSet = new HashSet<>(expandChunks(cleanBaseSet, 1));
 
         Map<ChunkPos, ProtoChunk> originalBlendingView = new ConcurrentHashMap<>(chunks);
         originalBlendingView.putAll(originalBlendingChunks);
@@ -1054,45 +1065,46 @@ final class V26_3TerrainEngine {
             .toList();
         for (ChunkPos pos : blenderPositions) {
             ProtoChunk center = chunks.get(pos);
-            if (center == null) continue;
-            var blendingRegion = new SeededWorldGenRegion(
-                nmsLevel,
-                buildCache(pos, 1, chunks, chunkHolders, regionCaches, nmsLevel, biomeSource, randomState),
-                biomesStep, center, seed, biomeSource, randomState,
-                originalBlendingView, carverBiomeContexts
-            );
+            if (center == null) {
+                continue;
+            }
+            var blendingRegion = new SeededWorldGenRegion(nmsLevel, buildCache(pos, 1, chunks, chunkHolders,
+                regionCaches, nmsLevel, biomeSource, randomState), biomesStep, center, seed, biomeSource, randomState,
+                originalBlendingView, carverBiomeContexts);
             Blender blender = Blender.of(blendingRegion);
             blendersByPosition.put(pos, blender);
-            if (!blender.isEmpty()) activeBlenderCount++;
+            if (!blender.isEmpty()) {
+                activeBlenderCount++;
+            }
         }
         Logging.logger().info("[NmsTerrainGenerator] Prepared " + blendersByPosition.size()
-            + " Blender snapshot(s) from " + originalBlendingChunks.size()
-            + " original old-noise chunk(s); " + activeBlenderCount + " snapshot(s) active.");
+            + " Blender snapshot(s) from " + originalBlendingChunks.size() + " original old-noise chunk(s); "
+            + activeBlenderCount + " snapshot(s) active.");
         originalBlendingView.clear();
         originalBlendingChunks.clear();
         if (extraContextBounds == null) {
-            trimReadOnlyContext(featureSourceSet, FEATURE_CACHE_RADIUS, chunks, chunkHolders,
-                chunksToGen, diskLoaded, fullTerrainLoaded);
+            trimReadOnlyContext(featureSourceSet, FEATURE_CACHE_RADIUS, chunks, chunkHolders, chunksToGen, diskLoaded,
+                fullTerrainLoaded);
         }
 
         BulkGenerationSession activeBulkSession = bulkSession;
         // Old-noise scopes are written on the first pass but read only by an exact consecutive
         // replay. FEATURES is intentionally absent from the snapshot and always runs again.
         boolean terrainCacheEnabled = cacheAdmissionEnabled;
-        boolean retainAllTerrainStages = centerChunks.size() == 1
-            || (activeBulkSession != null && activeBulkSession.retainAllTerrainStages);
+        boolean retainAllTerrainStages = centerChunks.size() == 1 || (activeBulkSession != null
+            && activeBulkSession.retainAllTerrainStages);
         int targetMinX = centerChunks.stream().mapToInt(ChunkPos::x).min().orElse(0);
         int targetMaxX = centerChunks.stream().mapToInt(ChunkPos::x).max().orElse(0);
         int targetMinZ = centerChunks.stream().mapToInt(ChunkPos::z).min().orElse(0);
         int targetMaxZ = centerChunks.stream().mapToInt(ChunkPos::z).max().orElse(0);
         AtomicInteger terrainCacheStores = new AtomicInteger();
-        var terrainCacheWriteWarning = new java.util.concurrent.atomic.AtomicBoolean();
-        var terrainCacheWriteWork = new java.util.concurrent.atomic.LongAdder();
+        var terrainCacheWriteWarning = new AtomicBoolean();
+        var terrainCacheWriteWork = new LongAdder();
         List<ChunkPos> terrainCacheStoreCandidates = cleanBaseChunks.stream()
             .filter(pos -> !terrainCacheHits.contains(pos))
-            .filter(pos -> CarverStageCachePolicy.shouldRetain(
-                terrainCacheEnabled, retainAllTerrainStages, centerChunksSet.contains(pos),
-                pos.x(), pos.z(), targetMinX, targetMaxX, targetMinZ, targetMaxZ))
+            .filter(pos -> CarverStageCachePolicy.shouldRetain(terrainCacheEnabled, retainAllTerrainStages,
+                centerChunksSet.contains(pos), pos.x(), pos.z(), targetMinX, targetMaxX, targetMinZ,
+                targetMaxZ))
             .toList();
 
         // Build the same Paper status dependencies as a per-chunk DAG. This lets a chunk enter
@@ -1100,29 +1112,24 @@ final class V26_3TerrainEngine {
         // the slowest chunk in every whole-batch barrier.
         for (ProtoChunk pc : chunksToGen) {
             ChunkPos pos = pc.getPos();
-            if (!biomeWorkSet.contains(pos)
-                || fullTerrainLoaded.contains(pos) || terrainCacheHits.contains(pos)) {
+            if (!biomeWorkSet.contains(pos) || fullTerrainLoaded.contains(pos) || terrainCacheHits.contains(pos)) {
                 biomeFutures.put(pos, ready);
             } else if (savedBiomesLoaded.contains(pos)) {
                 pc.setPersistedStatus(ChunkStatus.BIOMES);
                 biomeFutures.put(pos, ready);
             } else {
                 biomeFutures.put(pos, stageFuture(ready, pool, isCancelled, biomeWork, () -> {
-                    var region = new SeededWorldGenRegion(nmsLevel,
-                        buildCache(pos, 1, chunks, chunkHolders, regionCaches, nmsLevel, biomeSource, randomState),
-                        biomesStep, pc, seed, biomeSource, randomState, chunks, carverBiomeContexts);
-                    generator.createBiomes(
-                        randomState,
-                        blendersByPosition.getOrDefault(pos, Blender.empty()),
-                        nmsLevel.structureManager().forWorldGenRegion(region),
-                        pc
-                    ).join();
+                    var region = new SeededWorldGenRegion(nmsLevel, buildCache(pos, 1, chunks, chunkHolders,
+                        regionCaches, nmsLevel, biomeSource, randomState), biomesStep, pc, seed, biomeSource,
+                        randomState, chunks, carverBiomeContexts);
+                    generator.createBiomes(randomState, blendersByPosition.getOrDefault(pos, Blender.empty()),
+                        nmsLevel.structureManager().forWorldGenRegion(region), pc).join();
                     pc.setPersistedStatus(ChunkStatus.BIOMES);
                 }));
             }
         }
 
-        java.util.Set<ChunkPos> scheduledTerrain = new java.util.HashSet<>();
+        Set<ChunkPos> scheduledTerrain = new HashSet<>();
         for (ChunkPos pos : cleanBaseChunks) {
             ProtoChunk chunk = chunks.get(pos);
             if (chunk == null || !scheduledTerrain.add(pos)) {
@@ -1134,18 +1141,11 @@ final class V26_3TerrainEngine {
             }
             CompletableFuture<Void> dependency = neighborhoodBarrier(biomeFutures, pos, 1, ready);
             terrainFutures.put(pos, stageFuture(dependency, pool, isCancelled, terrainWork, () -> {
-                var region = new SeededWorldGenRegion(
-                    nmsLevel,
-                    buildCache(pos, 1, chunks, chunkHolders, regionCaches, nmsLevel, biomeSource, randomState),
-                    terrainStep, chunk, seed, biomeSource, randomState, chunks, carverBiomeContexts
-                );
-                TerrainGenerationStep.generate(
-                    generator,
-                    chunk,
-                    region,
-                    randomState,
-                    blendersByPosition.getOrDefault(pos, Blender.empty())
-                );
+                var region = new SeededWorldGenRegion(nmsLevel, buildCache(pos, 1, chunks, chunkHolders, regionCaches,
+                    nmsLevel, biomeSource, randomState), terrainStep, chunk, seed, biomeSource, randomState, chunks,
+                    carverBiomeContexts);
+                TerrainGenerationStep.generate(generator, chunk, region, randomState, blendersByPosition.getOrDefault(
+                    pos, Blender.empty()));
                 addWeight.accept(W_OUTER);
                 if (centerChunksSet.contains(pos)) {
                     addWeight.accept(W_CARVER);
@@ -1159,14 +1159,13 @@ final class V26_3TerrainEngine {
         if (!terrainCacheStoreCandidates.isEmpty() && !isCancelled.getAsBoolean()) {
             CompletableFuture<?>[] cacheDependencies = terrainCacheStoreCandidates.stream()
                 .map(terrainFutures::get)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .toArray(CompletableFuture[]::new);
             CompletableFuture.allOf(cacheDependencies).join();
 
             CompletableFuture<Void> snapshotFuture = new CompletableFuture<>();
             ChunkPos cacheAnchor = centerChunks.getFirst();
-            Location cacheLocation = new Location(
-                world, cacheAnchor.x() * 16 + 8, 64, cacheAnchor.z() * 16 + 8);
+            Location cacheLocation = new Location(world, cacheAnchor.x() * 16 + 8, 64, cacheAnchor.z() * 16 + 8);
             try {
                 Scheduler.runTask(plugin, () -> {
                     long cacheWriteStarted = System.nanoTime();
@@ -1174,34 +1173,49 @@ final class V26_3TerrainEngine {
                         for (ChunkPos pos : terrainCacheStoreCandidates) {
                             ProtoChunk pc = chunks.get(pos);
                             if (pc == null || !pc.getPersistedStatus().isOrAfter(ChunkStatus.TERRAIN)
-                                || pc.getPersistedStatus().isOrAfter(ChunkStatus.FEATURES)) continue;
+                                || pc.getPersistedStatus().isOrAfter(ChunkStatus.FEATURES)) {
+                                continue;
+                            }
                             try {
                                 CompoundTag snapshot = SerializableChunkData.copyOf(nmsLevel, pc).write();
-                                CarverStageKey cacheKey = new CarverStageKey(
-                                    world.getUID(), seed, generatorIdentity, randomStateIdentity, pos.pack(),
-                                    oldNoiseAround || centerChunksSet.contains(pos) ? generationScope : null);
+                                CarverStageKey cacheKey = new CarverStageKey(world.getUID(), seed, generatorIdentity,
+                                    randomStateIdentity, pos.pack(), oldNoiseAround || centerChunksSet.contains(pos)
+                                        ? generationScope
+                                        : null);
                                 terrainStageCache.put(cacheKey, snapshot);
                                 terrainCacheStores.incrementAndGet();
-                            } catch (Throwable cacheFailure) {
+                            } catch (Exception | LinkageError cacheFailure) {
                                 if (terrainCacheWriteWarning.compareAndSet(false, true)) {
                                     Logging.logger().warning("[NmsTerrainGenerator] TERRAIN cache snapshot failed; "
                                         + "generation will continue without that entry: "
-                                        + cacheFailure.getClass().getSimpleName() + ": "
-                                        + String.valueOf(cacheFailure.getMessage()));
+                                        + cacheFailure.getClass().getSimpleName() + ": " + String.valueOf(
+                                            cacheFailure.getMessage()));
                                 }
                             }
                         }
+                    } catch (Throwable failure) {
+                        snapshotFuture.completeExceptionally(failure);
+                        throw TerrainGenerationFailure.asUnchecked(failure);
                     } finally {
                         terrainCacheWriteWork.add(System.nanoTime() - cacheWriteStarted);
-                        snapshotFuture.complete(null);
+                        if (!snapshotFuture.isDone()) {
+                            snapshotFuture.complete(null);
+                        }
                     }
                 }, cacheLocation);
                 snapshotFuture.join();
-            } catch (Throwable schedulingFailure) {
+            } catch (RuntimeException | LinkageError schedulingFailure) {
+                Throwable cause = schedulingFailure;
+                while (cause instanceof CompletionException && cause.getCause() != null) {
+                    cause = cause.getCause();
+                }
+                if (cause instanceof Error error && !(error instanceof LinkageError)) {
+                    throw error;
+                }
                 if (terrainCacheWriteWarning.compareAndSet(false, true)) {
                     Logging.logger().warning("[NmsTerrainGenerator] Could not schedule TERRAIN cache snapshot: "
-                        + schedulingFailure.getClass().getSimpleName() + ": "
-                        + String.valueOf(schedulingFailure.getMessage()));
+                        + schedulingFailure.getClass().getSimpleName() + ": " + String.valueOf(
+                            schedulingFailure.getMessage()));
                 }
             }
         }
@@ -1214,8 +1228,10 @@ final class V26_3TerrainEngine {
                 final int sx = strideX, sz = strideZ;
                 List<CompletableFuture<Void>> stripeFutures = new ArrayList<>();
                 for (ChunkPos pos : decorationChunks) {
-                    if (Math.floorMod(pos.x(), DECORATION_STRIDE) != sx
-                        || Math.floorMod(pos.z(), DECORATION_STRIDE) != sz) continue;
+                    if (Math.floorMod(pos.x(), DECORATION_STRIDE) != sx || Math.floorMod(pos.z(),
+                        DECORATION_STRIDE) != sz) {
+                        continue;
+                    }
                     List<CompletableFuture<Void>> dependencies = new ArrayList<>();
                     dependencies.add(stripeBarrier);
                     // Paper declares TERRAIN radius one, while some structure features perform
@@ -1223,27 +1239,30 @@ final class V26_3TerrainEngine {
                     // so FEATURES never races a neighbouring chunk still generating its sections.
                     for (int dx = -FEATURE_CACHE_RADIUS; dx <= FEATURE_CACHE_RADIUS; dx++) {
                         for (int dz = -FEATURE_CACHE_RADIUS; dz <= FEATURE_CACHE_RADIUS; dz++) {
-                            CompletableFuture<Void> terrain = terrainFutures.get(new ChunkPos(pos.x() + dx, pos.z() + dz));
-                            if (terrain != null) dependencies.add(terrain);
+                            CompletableFuture<Void> terrain = terrainFutures.get(new ChunkPos(pos.x() + dx, pos.z()
+                                + dz));
+                            if (terrain != null) {
+                                dependencies.add(terrain);
+                            }
                         }
                     }
-                    CompletableFuture<Void> dependency = CompletableFuture.allOf(dependencies.toArray(CompletableFuture[]::new));
+                    CompletableFuture<Void> dependency = CompletableFuture.allOf(dependencies.toArray(
+                        CompletableFuture[]::new));
                     ProtoChunk pc = chunks.get(pos);
                     stripeFutures.add(stageFuture(dependency, pool, isCancelled, featureWork, () -> {
-                        Heightmap.primeHeightmaps(pc, java.util.EnumSet.of(
-                            Heightmap.Types.MOTION_BLOCKING,
-                            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                            Heightmap.Types.OCEAN_FLOOR,
-                            Heightmap.Types.WORLD_SURFACE
-                        ));
-                        var region = new SeededWorldGenRegion(nmsLevel,
-                            buildCache(pos, FEATURE_CACHE_RADIUS, chunks, chunkHolders, regionCaches, nmsLevel, biomeSource, randomState),
-                            featureStep, pc, seed, biomeSource, randomState, chunks, carverBiomeContexts);
-                        generator.applyBiomeDecoration(region, pc,
-                            nmsLevel.structureManager().forWorldGenRegion(region));
+                        Heightmap.primeHeightmaps(pc, EnumSet.of(Heightmap.Types.MOTION_BLOCKING,
+                            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Heightmap.Types.OCEAN_FLOOR,
+                            Heightmap.Types.WORLD_SURFACE));
+                        var region = new SeededWorldGenRegion(nmsLevel, buildCache(pos, FEATURE_CACHE_RADIUS, chunks,
+                            chunkHolders, regionCaches, nmsLevel, biomeSource, randomState), featureStep, pc, seed,
+                            biomeSource, randomState, chunks, carverBiomeContexts);
+                        generator.applyBiomeDecoration(region, pc, nmsLevel.structureManager().forWorldGenRegion(
+                            region));
                         Blender.generateBorderTicks(region, pc);
                         pc.setPersistedStatus(ChunkStatus.FEATURES);
-                        if (centerChunksSet.contains(pos)) addWeight.accept(W_DECORATION);
+                        if (centerChunksSet.contains(pos)) {
+                            addWeight.accept(W_DECORATION);
+                        }
                     }));
                 }
                 if (!stripeFutures.isEmpty()) {
@@ -1253,32 +1272,26 @@ final class V26_3TerrainEngine {
         }
         stripeBarrier.join();
         GcSnapshot pipelineGcFinished = gcSnapshot();
-        TerrainJfr.endPhase(pipelineJfr, terrainFutures.size(),
-            biomeWork.sum() + terrainWork.sum() + featureWork.sum() + terrainCacheWriteWork.sum(),
-            pipelineGcFinished.collections() - pipelineGcStarted.collections(),
+        TerrainJfr.endPhase(pipelineJfr, terrainFutures.size(), biomeWork.sum() + terrainWork.sum() + featureWork.sum()
+            + terrainCacheWriteWork.sum(), pipelineGcFinished.collections() - pipelineGcStarted.collections(),
             pipelineGcFinished.millis() - pipelineGcStarted.millis(), true);
-        Logging.logger().info("[NmsTerrainGenerator] Terrain pipeline completed in "
-            + (System.currentTimeMillis() - pipelineStarted) + " ms (worker-ms: biomes="
-            + nanosToMillis(biomeWork) + ", terrain=" + nanosToMillis(terrainWork)
-            + ", features=" + nanosToMillis(featureWork) + ", terrain-cache-write="
-            + nanosToMillis(terrainCacheWriteWork) + "; cache=" + terrainCacheHits.size()
-            + " hit/" + terrainCacheStores.get() + " stored/" + terrainStageCache.size() + " retained; "
-            + gcDelta(pipelineGcStarted, gcSnapshot()) + ").");
+        Logging.logger().info("[NmsTerrainGenerator] Terrain pipeline completed in " + (System.currentTimeMillis()
+            - pipelineStarted) + " ms (worker-ms: biomes=" + nanosToMillis(biomeWork) + ", terrain=" + nanosToMillis(
+                terrainWork) + ", features=" + nanosToMillis(featureWork) + ", terrain-cache-write=" + nanosToMillis(
+                    terrainCacheWriteWork) + "; cache=" + terrainCacheHits.size() + " hit/" + terrainCacheStores.get()
+            + " stored/" + terrainStageCache.size() + " retained; " + gcDelta(pipelineGcStarted, gcSnapshot()) + ").");
         onStage.accept("heightmaps");
         long startHeightmaps = System.currentTimeMillis();
-        java.util.Set<Heightmap.Types> heightmapTypes = java.util.EnumSet.of(
-            Heightmap.Types.MOTION_BLOCKING,
-            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-            Heightmap.Types.OCEAN_FLOOR,
-            Heightmap.Types.WORLD_SURFACE
-        );
+        Set<Heightmap.Types> heightmapTypes = EnumSet.of(Heightmap.Types.MOTION_BLOCKING,
+            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE);
         for (ChunkPos pos : centerChunks) {
             ProtoChunk pc = chunks.get(pos);
             if (pc != null) {
                 Heightmap.primeHeightmaps(pc, heightmapTypes);
             }
         }
-        Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Heightmaps primed in " + (System.currentTimeMillis() - startHeightmaps) + " ms.");
+        Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Heightmaps primed in " + (System.currentTimeMillis()
+            - startHeightmaps) + " ms.");
 
         onStage.accept("init_light");
         long startInitLight = System.currentTimeMillis();
@@ -1292,17 +1305,18 @@ final class V26_3TerrainEngine {
                 lightEngine.updateSectionStatus(SectionPos.of(pos, minSectionY + i), isEmpty);
             }
         }
-        Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Step 9 (INITIALIZE_LIGHT) completed in " + (System.currentTimeMillis() - startInitLight) + " ms.");
+        Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Step 9 (INITIALIZE_LIGHT) completed in "
+            + (System.currentTimeMillis() - startInitLight) + " ms.");
 
         onStage.accept("light");
         long startLight = System.currentTimeMillis();
         try {
             if (lightEngine instanceof ca.spottedleaf.moonrise.patches.starlight.light.StarLightLightingProvider starlightProvider) {
-                ca.spottedleaf.moonrise.patches.starlight.light.StarLightInterface starlightInterface =
-                    starlightProvider.starlight$getLightEngine();
+                ca.spottedleaf.moonrise.patches.starlight.light.StarLightInterface starlightInterface = starlightProvider.starlight$getLightEngine();
                 for (ChunkPos pos : centerChunks) {
                     ProtoChunk pc = chunks.get(pos);
-                    Boolean[] emptySections = ca.spottedleaf.moonrise.patches.starlight.light.StarLightEngine.getEmptySectionsForChunk(pc);
+                    Boolean[] emptySections = ca.spottedleaf.moonrise.patches.starlight.light.StarLightEngine.getEmptySectionsForChunk(
+                        pc);
                     starlightInterface.lightChunk(pc, emptySections);
                 }
             } else {
@@ -1318,7 +1332,8 @@ final class V26_3TerrainEngine {
         } catch (Exception e) {
             Logging.logger().severe("[NmsTerrainGenerator] LIGHT phase failed, chunks will be relit on first load", e);
         }
-        Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Step 10 (LIGHT) completed in " + (System.currentTimeMillis() - startLight) + " ms.");
+        Logging.logger().info("[NmsTerrainGenerator] Phase 1 - Step 10 (LIGHT) completed in "
+            + (System.currentTimeMillis() - startLight) + " ms.");
 
         // Terrain/decoration/heightmaps/light are all done at this point — bump the persisted status
         // the rest of the pyramid (FULL) so the chunk reads back as "fully generated" on its very next
@@ -1335,59 +1350,68 @@ final class V26_3TerrainEngine {
             }
         }
 
-        java.util.Set<ChunkPos> centerSet = new java.util.HashSet<>(centerChunks);
+        Set<ChunkPos> centerSet = new HashSet<>(centerChunks);
         List<ChunkPos> outerChunks = chunksToGen.stream()
             .map(ProtoChunk::getPos)
             .filter(pos -> !centerSet.contains(pos))
             .toList();
 
-        return new GenerationResult(nmsLevel, centerChunks, outerChunks, chunks, addWeight, onProgress, onStage,
-            seed, 0, 0, 0, 0, generationScope);
+        return new GenerationResult(nmsLevel, centerChunks, outerChunks, chunks, addWeight, onProgress, onStage, seed,
+            0, 0, 0, 0, generationScope);
     }
 
-    private static CompletableFuture<Void> serializeOnRegionThread(
-            GenerationResult result, World world) {
+    private static CompletableFuture<Void> serializeOnRegionThread(GenerationResult result, World world,
+        BooleanSupplier isCancelled) {
         result.onStage().accept("serialize");
         long startNbt = System.currentTimeMillis();
 
-        Map<ChunkPos, CompoundTag> serialized = new ConcurrentHashMap<>(
-            result.centerChunks().size() + result.outerChunks().size());
-        List<ChunkPos> voidChunks = java.util.Collections.synchronizedList(new ArrayList<>());
+        Map<ChunkPos, CompoundTag> serialized = new ConcurrentHashMap<>(result.centerChunks().size()
+            + result.outerChunks().size());
+        List<ChunkPos> voidChunks = Collections.synchronizedList(new ArrayList<>());
         Map<ChunkPos, String> chunkIssues = new ConcurrentHashMap<>();
 
         CompletableFuture<Map<ChunkPos, CompoundTag>> nbtFuture = new CompletableFuture<>();
         ChunkPos first = result.centerChunks().get(0);
         Location regionLoc = new Location(world, first.x() * 16 + 8, 64, first.z() * 16 + 8);
         Scheduler.runTask(plugin, () -> {
-                for (ChunkPos pos : result.centerChunks()) {
-                    try {
-                        ProtoChunk pc = result.chunks().get(pos);
-                        Holder<Biome> centerBiome = pc.getNoiseBiome(8 >> 2, 64 >> 2, 8 >> 2);
-                        if (centerBiome.is(Biomes.THE_VOID)) voidChunks.add(pos);
-                        materializePendingBlockEntities(result.level(), pc);
-                        serialized.put(pos, SerializableChunkData.copyOf(result.level(), pc).write());
-                        result.addWeight().accept(W_SERIALIZE);
-                    } catch (Throwable t) {
-                        chunkIssues.put(pos, t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName());
-                        Logging.logger().severe("[NmsTerrainGenerator] Failed to serialize chunk " + pos, t);
+            for (ChunkPos pos : result.centerChunks()) {
+                try {
+                    ProtoChunk pc = result.chunks().get(pos);
+                    Holder<Biome> centerBiome = pc.getNoiseBiome(8 >> 2, 64 >> 2, 8 >> 2);
+                    if (centerBiome.is(Biomes.THE_VOID)) {
+                        voidChunks.add(pos);
                     }
+                    materializePendingBlockEntities(result.level(), pc);
+                    serialized.put(pos, SerializableChunkData.copyOf(result.level(), pc).write());
+                    result.addWeight().accept(W_SERIALIZE);
+                } catch (Throwable t) {
+                    if (t instanceof Error error) {
+                        nbtFuture.completeExceptionally(error);
+                        throw error;
+                    }
+                    chunkIssues.put(pos, t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName());
+                    Logging.logger().severe("[NmsTerrainGenerator] Failed to serialize chunk " + pos, t);
                 }
+            }
 
-                int voidCount = voidChunks.size();
-                Logging.logger().info("[NmsTerrainGenerator] Phase 2a (NBT Serialization) completed in " + (System.currentTimeMillis() - startNbt) + " ms.");
-                Logging.logger().info("[NmsTerrainGenerator] Total chunks generated: " + result.centerChunks().size());
-                if (voidCount > 0) Logging.logger().warning("[NmsTerrainGenerator] Void chunks: " + voidChunks);
-                if (!chunkIssues.isEmpty()) {
-                    Logging.logger().severe("[NmsTerrainGenerator] Serialization issues: " + chunkIssues);
-                    nbtFuture.completeExceptionally(new IllegalStateException(
-                        "Failed to serialize " + chunkIssues.size() + " of "
-                            + result.centerChunks().size() + " regenerated chunk(s)"));
-                    return;
-                }
-                nbtFuture.complete(serialized);
-            }, regionLoc);
+            int voidCount = voidChunks.size();
+            Logging.logger().info("[NmsTerrainGenerator] Phase 2a (NBT Serialization) completed in "
+                + (System.currentTimeMillis() - startNbt) + " ms.");
+            Logging.logger().info("[NmsTerrainGenerator] Total chunks generated: " + result.centerChunks().size());
+            if (voidCount > 0) {
+                Logging.logger().warning("[NmsTerrainGenerator] Void chunks: " + voidChunks);
+            }
+            if (!chunkIssues.isEmpty()) {
+                Logging.logger().severe("[NmsTerrainGenerator] Serialization issues: " + chunkIssues);
+                nbtFuture.completeExceptionally(new IllegalStateException("Failed to serialize " + chunkIssues.size()
+                    + " of " + result.centerChunks().size() + " regenerated chunk(s)"));
+                return;
+            }
+            nbtFuture.complete(serialized);
+        }, regionLoc);
 
         CompletableFuture<Void> ioFuture = nbtFuture.thenAcceptAsync(serializedMap -> {
+            TerrainGenerationCancellation.throwIfCancelled(isCancelled);
             long startIo = System.currentTimeMillis();
             var chunkSrc = result.level().getChunkSource();
             int written = 0;
@@ -1395,11 +1419,15 @@ final class V26_3TerrainEngine {
             var entityCache = entityDataController.getCache();
             for (ChunkPos pos : result.centerChunks()) {
                 CompoundTag nbt = serializedMap.get(pos);
-                if (nbt == null) continue;
+                if (nbt == null) {
+                    continue;
+                }
                 chunkSrc.chunkMap.write(pos, () -> nbt);
                 BulkGenerationSession session = bulkSession;
-                if (session != null) session.update(world.getUID(), pos, nbt);
-                
+                if (session != null) {
+                    session.update(world.getUID(), pos, nbt);
+                }
+
                 ProtoChunk pc = result.chunks().get(pos);
                 if (pc != null) {
                     List<CompoundTag> protoEntities = pc.getEntities();
@@ -1407,7 +1435,8 @@ final class V26_3TerrainEngine {
                         try {
                             entityCache.write(pos, null);
                         } catch (java.io.IOException e) {
-                            Logging.logger().warning("Failed to delete entities for chunk " + pos + ": " + e.getMessage());
+                            Logging.logger().warning("Failed to delete entities for chunk " + pos + ": "
+                                + e.getMessage());
                         }
                     } else {
                         ListTag entitiesList = new ListTag();
@@ -1418,11 +1447,12 @@ final class V26_3TerrainEngine {
                         try {
                             entityCache.write(pos, entityNbt);
                         } catch (java.io.IOException e) {
-                            Logging.logger().warning("Failed to write entities for chunk " + pos + ": " + e.getMessage());
+                            Logging.logger().warning("Failed to write entities for chunk " + pos + ": "
+                                + e.getMessage());
                         }
                     }
                 }
-                
+
                 written++;
             }
             // Moonrise synchronize(false) waits until every scheduled save has reached region
@@ -1432,7 +1462,8 @@ final class V26_3TerrainEngine {
             chunkSrc.chunkMap.synchronize(false).join();
             result.onProgress().accept(100);
             result.onStage().accept("done");
-            Logging.logger().info("[NmsTerrainGenerator] Phase 2b (Disk Write) completed in " + (System.currentTimeMillis() - startIo) + " ms. Wrote " + written + " chunks.");
+            Logging.logger().info("[NmsTerrainGenerator] Phase 2b (Disk Write) completed in "
+                + (System.currentTimeMillis() - startIo) + " ms. Wrote " + written + " chunks.");
         }, ioExecutor);
 
         return ioFuture.thenCompose(ignored -> {
@@ -1481,28 +1512,25 @@ final class V26_3TerrainEngine {
                         }
                     } catch (Throwable t) {
                         Logging.logger().severe("Failed to apply terrain to chunk " + pos, t);
+                        fut.completeExceptionally(t);
                     } finally {
                         fut.complete(null);
                     }
                 }, delayTicks, chunkLoc);
             }
-            return CompletableFuture.allOf(applyFutures.toArray(new CompletableFuture[0]))
-                .thenRun(() -> Logging.logger().info(
-                    "[NmsTerrainGenerator] Phase 2c (Differential live apply) completed in "
-                        + (System.currentTimeMillis() - startApply) + " ms. Processed " + result.centerChunks().size()
-                        + " chunks (loaded=" + loadedChunks.get() + ", refreshed=" + refreshedChunks.get()
-                        + ", sections changed=" + changedSections.get() + ", unchanged=" + unchangedSections.get() + ")."));
+            return CompletableFuture.allOf(applyFutures.toArray(new CompletableFuture[0])).thenRun(
+                () -> Logging.logger().info("[NmsTerrainGenerator] Phase 2c (Differential live apply) completed in "
+                    + (System.currentTimeMillis() - startApply) + " ms. Processed " + result.centerChunks().size()
+                    + " chunks (loaded=" + loadedChunks.get() + ", refreshed=" + refreshedChunks.get()
+                    + ", sections changed=" + changedSections.get() + ", unchanged=" + unchangedSections.get() + ")."));
         });
     }
 
     /** Releases full disk-loaded ProtoChunks that later stages cannot observe. */
-    private static void trimReadOnlyContext(java.util.Set<ChunkPos> centers, int radius,
-                                            Map<ChunkPos, ProtoChunk> chunks,
-                                            Map<ChunkPos, ProtoChunkHolder> chunkHolders,
-                                            List<ProtoChunk> chunksToGen,
-                                            java.util.Set<ChunkPos> diskLoaded,
-                                            java.util.Set<ChunkPos> fullTerrainLoaded) {
-        java.util.Set<ChunkPos> keep = new java.util.HashSet<>();
+    private static void trimReadOnlyContext(Set<ChunkPos> centers, int radius, Map<ChunkPos, ProtoChunk> chunks,
+        Map<ChunkPos, ProtoChunkHolder> chunkHolders, List<ProtoChunk> chunksToGen, Set<ChunkPos> diskLoaded,
+        Set<ChunkPos> fullTerrainLoaded) {
+        Set<ChunkPos> keep = new HashSet<>();
         for (ChunkPos center : centers) {
             for (int dx = -radius; dx <= radius; dx++) {
                 for (int dz = -radius; dz <= radius; dz++) {
@@ -1520,8 +1548,8 @@ final class V26_3TerrainEngine {
             + " distant read-only context chunks; retaining " + chunksToGen.size() + " for generation.");
     }
 
-    private static List<ChunkPos> expandChunks(java.util.Collection<ChunkPos> chunks, int radius) {
-        java.util.Set<ChunkPos> expanded = new java.util.HashSet<>();
+    private static List<ChunkPos> expandChunks(Collection<ChunkPos> chunks, int radius) {
+        Set<ChunkPos> expanded = new HashSet<>();
         for (ChunkPos center : chunks) {
             for (int dx = -radius; dx <= radius; dx++) {
                 for (int dz = -radius; dz <= radius; dz++) {
@@ -1529,19 +1557,16 @@ final class V26_3TerrainEngine {
                 }
             }
         }
-        return expanded.stream()
-            .sorted(Comparator.comparingInt(ChunkPos::x).thenComparingInt(ChunkPos::z))
-            .toList();
+        return expanded.stream().sorted(Comparator.comparingInt(ChunkPos::x).thenComparingInt(ChunkPos::z)).toList();
     }
 
-    private static <T> void runBatch(List<T> items,
-                                     Consumer<T> work,
-                                     java.util.concurrent.Executor executor,
-                                     java.util.function.BooleanSupplier isCancelled) {
-        if (items.isEmpty()) return;
+    private static <T> void runBatch(List<T> items, Consumer<T> work, Executor executor, BooleanSupplier isCancelled) {
+        if (items.isEmpty()) {
+            return;
+        }
 
         int parallelism = 1;
-        if (executor instanceof java.util.concurrent.ForkJoinPool fjp) {
+        if (executor instanceof ForkJoinPool fjp) {
             parallelism = fjp.getParallelism();
         } else {
             parallelism = Math.max(1, Runtime.getRuntime().availableProcessors());
@@ -1552,7 +1577,7 @@ final class V26_3TerrainEngine {
         if (workerCount <= 1) {
             for (T item : items) {
                 if (isCancelled.getAsBoolean()) {
-                    throw new java.util.concurrent.CancellationException("Task cancelled");
+                    throw new CancellationException("Task cancelled");
                 }
                 work.accept(item);
             }
@@ -1569,7 +1594,7 @@ final class V26_3TerrainEngine {
                 int itemIndex;
                 while ((itemIndex = nextIndex.getAndIncrement()) < totalItems) {
                     if (isCancelled.getAsBoolean()) {
-                        throw new java.util.concurrent.CancellationException("Task cancelled");
+                        throw new CancellationException("Task cancelled");
                     }
                     work.accept(items.get(itemIndex));
                 }
@@ -1577,24 +1602,19 @@ final class V26_3TerrainEngine {
         }
         try {
             CompletableFuture.allOf(futures).join();
-        } catch (java.util.concurrent.CompletionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException re) throw re;
-            throw new RuntimeException(cause);
+        } catch (CompletionException e) {
+            throw TerrainGenerationFailure.asUnchecked(e);
         }
     }
 
     private record RegionCacheKey(ChunkPos center, int radius) {}
 
-    private static StaticCache2D<net.minecraft.server.level.GenerationChunkHolder> buildCache(
-        ChunkPos center, int radius, Map<ChunkPos, ProtoChunk> chunks,
-        Map<ChunkPos, ProtoChunkHolder> chunkHolders,
+    private static StaticCache2D<net.minecraft.server.level.GenerationChunkHolder> buildCache(ChunkPos center,
+        int radius, Map<ChunkPos, ProtoChunk> chunks, Map<ChunkPos, ProtoChunkHolder> chunkHolders,
         Map<RegionCacheKey, StaticCache2D<net.minecraft.server.level.GenerationChunkHolder>> regionCaches,
-        ServerLevel nmsLevel,
-        net.minecraft.world.level.biome.BiomeSource biomeSource, RandomState randomState
-    ) {
-        return regionCaches.computeIfAbsent(new RegionCacheKey(center, radius), ignored ->
-            StaticCache2D.create(center.x(), center.z(), radius, (x, z) -> {
+        ServerLevel nmsLevel, net.minecraft.world.level.biome.BiomeSource biomeSource, RandomState randomState) {
+        return regionCaches.computeIfAbsent(new RegionCacheKey(center, radius), ignored -> StaticCache2D.create(
+            center.x(), center.z(), radius, (x, z) -> {
                 ChunkPos pos = new ChunkPos(x, z);
                 return chunkHolders.computeIfAbsent(pos, p -> {
                     ProtoChunk pc = chunks.get(p);
@@ -1611,15 +1631,11 @@ final class V26_3TerrainEngine {
             }));
     }
 
-    private static CompletableFuture<Void> stageFuture(
-            CompletableFuture<Void> dependency,
-            java.util.concurrent.Executor executor,
-            java.util.function.BooleanSupplier isCancelled,
-            java.util.concurrent.atomic.LongAdder workNanos,
-            Runnable work) {
+    private static CompletableFuture<Void> stageFuture(CompletableFuture<Void> dependency, Executor executor,
+        BooleanSupplier isCancelled, LongAdder workNanos, Runnable work) {
         return dependency.thenRunAsync(() -> {
             if (isCancelled.getAsBoolean()) {
-                throw new java.util.concurrent.CancellationException("Task cancelled");
+                throw new CancellationException("Task cancelled");
             }
             long started = System.nanoTime();
             try {
@@ -1630,36 +1646,36 @@ final class V26_3TerrainEngine {
         }, executor);
     }
 
-    private static CompletableFuture<Void> neighborhoodBarrier(
-            Map<ChunkPos, CompletableFuture<Void>> stages,
-            ChunkPos center, int radius, CompletableFuture<Void> ready) {
-        if (radius == 0) return stages.getOrDefault(center, ready);
+    private static CompletableFuture<Void> neighborhoodBarrier(Map<ChunkPos, CompletableFuture<Void>> stages,
+        ChunkPos center, int radius, CompletableFuture<Void> ready) {
+        if (radius == 0) {
+            return stages.getOrDefault(center, ready);
+        }
         List<CompletableFuture<Void>> dependencies = new ArrayList<>((radius * 2 + 1) * (radius * 2 + 1));
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
                 CompletableFuture<Void> dependency = stages.get(new ChunkPos(center.x() + dx, center.z() + dz));
-                if (dependency != null) dependencies.add(dependency);
+                if (dependency != null) {
+                    dependencies.add(dependency);
+                }
             }
         }
-        return dependencies.isEmpty()
-            ? ready
-            : CompletableFuture.allOf(dependencies.toArray(CompletableFuture[]::new));
+        return dependencies.isEmpty() ? ready : CompletableFuture.allOf(dependencies.toArray(CompletableFuture[]::new));
     }
 
-    private static long nanosToMillis(java.util.concurrent.atomic.LongAdder nanos) {
-        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(nanos.sum());
+    private static long nanosToMillis(LongAdder nanos) {
+        return TimeUnit.NANOSECONDS.toMillis(nanos.sum());
     }
 
     private static long nanosToMillis(long nanos) {
-        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(nanos);
+        return TimeUnit.NANOSECONDS.toMillis(nanos);
     }
 
     private record ChunkTiming(ChunkPos pos, long wallNanos, long cpuNanos, String detail) {}
 
     private record GcSnapshot(long collections, long millis) {}
 
-    private static final java.lang.management.ThreadMXBean THREAD_MX_BEAN =
-        java.lang.management.ManagementFactory.getThreadMXBean();
+    private static final java.lang.management.ThreadMXBean THREAD_MX_BEAN = java.lang.management.ManagementFactory.getThreadMXBean();
 
     private static long currentThreadCpuNanos() {
         try {
@@ -1672,7 +1688,9 @@ final class V26_3TerrainEngine {
     }
 
     private static long elapsedThreadCpuNanos(long started) {
-        if (started < 0L) return -1L;
+        if (started < 0L) {
+            return -1L;
+        }
         long finished = currentThreadCpuNanos();
         return finished >= started ? finished - started : -1L;
     }
@@ -1683,116 +1701,134 @@ final class V26_3TerrainEngine {
         for (var collector : java.lang.management.ManagementFactory.getGarbageCollectorMXBeans()) {
             long count = collector.getCollectionCount();
             long time = collector.getCollectionTime();
-            if (count >= 0L) collections += count;
-            if (time >= 0L) millis += time;
+            if (count >= 0L) {
+                collections += count;
+            }
+            if (time >= 0L) {
+                millis += time;
+            }
         }
         return new GcSnapshot(collections, millis);
     }
 
     private static String gcDelta(GcSnapshot before, GcSnapshot after) {
-        return "gc=" + Math.max(0L, after.collections() - before.collections()) + " collection(s)/"
-            + Math.max(0L, after.millis() - before.millis()) + " ms";
+        return "gc=" + Math.max(0L, after.collections() - before.collections()) + " collection(s)/" + Math.max(0L,
+            after.millis() - before.millis()) + " ms";
     }
 
-    private static String timingDistribution(java.util.Collection<ChunkTiming> timings) {
-        if (timings.isEmpty()) return "n/a";
+    private static String timingDistribution(Collection<ChunkTiming> timings) {
+        if (timings.isEmpty()) {
+            return "n/a";
+        }
         long[] values = timings.stream().mapToLong(ChunkTiming::wallNanos).sorted().toArray();
         long total = 0L;
-        for (long value : values) total += value;
+        for (long value : values) {
+            total += value;
+        }
         int p95Index = Math.max(0, (int) Math.ceil(values.length * 0.95D) - 1);
-        long[] cpuValues = timings.stream().mapToLong(ChunkTiming::cpuNanos)
-            .filter(value -> value >= 0L).sorted().toArray();
-        String cpuSummary = cpuValues.length == 0 ? "cpu=n/a" : String.format(java.util.Locale.ROOT,
-            "cpu-avg=%.2f/p95=%.2f/max=%.2f ms",
-            java.util.Arrays.stream(cpuValues).average().orElse(0D) / 1_000_000D,
-            cpuValues[Math.max(0, (int) Math.ceil(cpuValues.length * 0.95D) - 1)] / 1_000_000D,
-            cpuValues[cpuValues.length - 1] / 1_000_000D);
-        return String.format(java.util.Locale.ROOT, "wall-avg=%.2f/p95=%.2f/max=%.2f ms, %s",
-            total / (double) values.length / 1_000_000D,
-            values[p95Index] / 1_000_000D,
-            values[values.length - 1] / 1_000_000D, cpuSummary);
+        long[] cpuValues = timings.stream()
+            .mapToLong(ChunkTiming::cpuNanos)
+            .filter(value -> value >= 0L)
+            .sorted()
+            .toArray();
+        String cpuSummary = cpuValues.length == 0 ? "cpu=n/a"
+            : String.format(Locale.ROOT, "cpu-avg=%.2f/p95=%.2f/max=%.2f ms", Arrays.stream(cpuValues)
+                .average()
+                .orElse(0D) / 1_000_000D, cpuValues[Math.max(0, (int) Math.ceil(cpuValues.length * 0.95D) - 1)] / 1_000_000D,
+                cpuValues[cpuValues.length - 1] / 1_000_000D);
+        return String.format(Locale.ROOT, "wall-avg=%.2f/p95=%.2f/max=%.2f ms, %s", total / (double) values.length
+            / 1_000_000D, values[p95Index] / 1_000_000D, values[values.length - 1] / 1_000_000D, cpuSummary);
     }
 
-    private static void logSlowChunkTimings(String stage,
-            java.util.Collection<ChunkTiming> timings, int limit, long thresholdMs) {
-        long thresholdNanos = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(thresholdMs);
+    private static void logSlowChunkTimings(String stage, Collection<ChunkTiming> timings, int limit,
+        long thresholdMs) {
+        long thresholdNanos = TimeUnit.MILLISECONDS.toNanos(thresholdMs);
         timings.stream()
             .filter(timing -> timing.wallNanos() >= thresholdNanos)
-            .sorted(java.util.Comparator.comparingLong(ChunkTiming::wallNanos).reversed())
+            .sorted(Comparator.comparingLong(ChunkTiming::wallNanos).reversed())
             .limit(limit)
-            .forEach(timing -> Logging.logger().info(String.format(java.util.Locale.ROOT,
-                "[NmsTerrainGenerator] Slow %s task: chunk=(%d, %d), wall=%.2f ms, cpu=%s%s",
-                stage, timing.pos().x(), timing.pos().z(), timing.wallNanos() / 1_000_000D,
-                timing.cpuNanos() < 0L ? "n/a" : String.format(java.util.Locale.ROOT,
-                    "%.2f ms", timing.cpuNanos() / 1_000_000D),
-                 timing.detail().isEmpty() ? "" : ", reason=" + timing.detail())));
+            .forEach(timing -> Logging.logger().info(String.format(
+                Locale.ROOT, "[NmsTerrainGenerator] Slow %s task: chunk=(%d, %d), wall=%.2f ms, cpu=%s%s", stage,
+                timing.pos().x(), timing.pos().z(), timing.wallNanos() / 1_000_000D, timing.cpuNanos() < 0L ? "n/a"
+                    : String.format(Locale.ROOT, "%.2f ms", timing.cpuNanos() / 1_000_000D), timing.detail().isEmpty()
+                        ? ""
+                        : ", reason=" + timing.detail())));
     }
 
     private static CachedStructureStarts snapshotStructureStarts(ProtoChunk chunk, ServerLevel level) {
-        var context = net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext
-            .fromLevel(level);
+        var context = net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext.fromLevel(
+            level);
         List<CompoundTag> snapshots = new ArrayList<>();
         for (var start : chunk.getAllStarts().values()) {
-            if (start.isValid()) snapshots.add(start.createTag(context, chunk.getPos()));
+            if (start.isValid()) {
+                snapshots.add(start.createTag(context, chunk.getPos()));
+            }
         }
         return new CachedStructureStarts(List.copyOf(snapshots));
     }
 
-    private static Map<net.minecraft.world.level.levelgen.structure.Structure,
-            net.minecraft.world.level.levelgen.structure.StructureStart> restoreStructureStarts(
-            CachedStructureStarts cached, ServerLevel level, long seed, ChunkPos startChunk) {
-        var context = net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext
-            .fromLevel(level);
-        Map<net.minecraft.world.level.levelgen.structure.Structure,
-            net.minecraft.world.level.levelgen.structure.StructureStart> restored = new HashMap<>();
+    private static Map<net.minecraft.world.level.levelgen.structure.Structure, net.minecraft.world.level.levelgen.structure.StructureStart> restoreStructureStarts(
+        CachedStructureStarts cached, ServerLevel level, long seed, ChunkPos startChunk) {
+        var context = net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext.fromLevel(
+            level);
+        Map<net.minecraft.world.level.levelgen.structure.Structure, net.minecraft.world.level.levelgen.structure.StructureStart> restored = new HashMap<>();
         for (CompoundTag snapshot : cached.starts()) {
-            var start = net.minecraft.world.level.levelgen.structure.StructureStart.loadStaticStart(
-                context, snapshot.copy(), seed);
+            var start = net.minecraft.world.level.levelgen.structure.StructureStart.loadStaticStart(context,
+                snapshot.copy(), seed);
             if (start == null || !start.isValid()) {
                 throw new IllegalStateException("Cached StructureStart could not be deserialized");
             }
             var box = start.getBoundingBox();
-            var event = new org.bukkit.event.world.AsyncStructureSpawnEvent(
-                level.getWorld(),
+            var event = new org.bukkit.event.world.AsyncStructureSpawnEvent(level.getWorld(),
                 org.bukkit.craftbukkit.generator.structure.CraftStructure.minecraftToBukkit(start.getStructure()),
-                new org.bukkit.util.BoundingBox(
-                    box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()),
+                new org.bukkit.util.BoundingBox(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()),
                 startChunk.x(), startChunk.z());
             org.bukkit.Bukkit.getPluginManager().callEvent(event);
-            if (!event.isCancelled()) restored.put(start.getStructure(), start);
+            if (!event.isCancelled()) {
+                restored.put(start.getStructure(), start);
+            }
         }
         return restored;
     }
 
-    private static String summarizeStructureStarts(
-            ProtoChunk chunk, net.minecraft.core.Registry<net.minecraft.world.level.levelgen.structure.Structure> registry) {
+    private static String summarizeStructureStarts(ProtoChunk chunk,
+        net.minecraft.core.Registry<net.minecraft.world.level.levelgen.structure.Structure> registry) {
         StringBuilder summary = new StringBuilder();
         int validStarts = 0;
         int totalPieces = 0;
         for (var entry : chunk.getAllStarts().entrySet()) {
             var start = entry.getValue();
-            if (!start.isValid()) continue;
-            if (validStarts++ > 0) summary.append('|');
+            if (!start.isValid()) {
+                continue;
+            }
+            if (validStarts++ > 0) {
+                summary.append('|');
+            }
             int pieces = start.getPieces().size();
             totalPieces += pieces;
             var box = start.getBoundingBox();
             var key = registry.getKey(entry.getKey());
             summary.append(key == null ? "unknown" : key)
-                .append("[pieces=").append(pieces)
-                .append(",box=").append(box.getXSpan()).append('x')
-                .append(box.getYSpan()).append('x').append(box.getZSpan()).append(']');
+                .append("[pieces=")
+                .append(pieces)
+                .append(",box=")
+                .append(box.getXSpan())
+                .append('x')
+                .append(box.getYSpan())
+                .append('x')
+                .append(box.getZSpan())
+                .append(']');
         }
-        return validStarts == 0 ? "starts=0" : "starts=" + validStarts
-            + ",pieces=" + totalPieces + ",structures=" + summary;
+        return validStarts == 0 ? "starts=0"
+            : "starts=" + validStarts + ",pieces=" + totalPieces + ",structures=" + summary;
     }
 
     private static ProtoChunk newProtoChunk(ChunkPos pos, ServerLevel level) {
         return new ProtoChunk(pos, UpgradeData.EMPTY, level, level.palettedContainerFactory(), null);
     }
 
-    private static ProtoChunk newBiomeReadyProtoChunk(
-            ChunkPos pos, ServerLevel level,
-            net.minecraft.world.level.biome.BiomeSource biomeSource, RandomState randomState) {
+    private static ProtoChunk newBiomeReadyProtoChunk(ChunkPos pos, ServerLevel level,
+        net.minecraft.world.level.biome.BiomeSource biomeSource, RandomState randomState) {
         ProtoChunk chunk = newProtoChunk(pos, level);
         chunk.fillBiomesFromNoise(biomeSource.createUncachedResolver(randomState));
         chunk.setPersistedStatus(ChunkStatus.BIOMES);
@@ -1806,7 +1842,9 @@ final class V26_3TerrainEngine {
         for (int sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
             LevelChunkSection sourceSection = sourceSections[sectionIndex];
             LevelChunkSection destinationSection = destinationSections[sectionIndex];
-            if (sourceSection == null || destinationSection == null) continue;
+            if (sourceSection == null || destinationSection == null) {
+                continue;
+            }
             if (!(sourceSection.getBiomes() instanceof PalettedContainer<Holder<Biome>> sourceBiomes)
                 || !(destinationSection.getBiomes() instanceof PalettedContainer<Holder<Biome>> destinationBiomes)) {
                 continue;
@@ -1814,25 +1852,27 @@ final class V26_3TerrainEngine {
             for (int biomeX = 0; biomeX < 4; biomeX++) {
                 for (int biomeY = 0; biomeY < 4; biomeY++) {
                     for (int biomeZ = 0; biomeZ < 4; biomeZ++) {
-                        destinationBiomes.set(
-                            biomeX, biomeY, biomeZ, sourceBiomes.get(biomeX, biomeY, biomeZ));
+                        destinationBiomes.set(biomeX, biomeY, biomeZ, sourceBiomes.get(biomeX, biomeY, biomeZ));
                     }
                 }
             }
         }
     }
 
-    private static java.util.Set<ChunkPos> collectStructureStartsToRefresh(
-            java.util.Set<ChunkPos> targets, List<ChunkPos> featureSources,
-            Map<ChunkPos, ProtoChunk> chunks) {
-        java.util.Set<ChunkPos> result = new java.util.HashSet<>(targets);
+    private static Set<ChunkPos> collectStructureStartsToRefresh(Set<ChunkPos> targets, List<ChunkPos> featureSources,
+        Map<ChunkPos, ProtoChunk> chunks) {
+        Set<ChunkPos> result = new HashSet<>(targets);
         for (ChunkPos sourcePos : featureSources) {
             ProtoChunk source = chunks.get(sourcePos);
-            if (source == null) continue;
+            if (source == null) {
+                continue;
+            }
             for (it.unimi.dsi.fastutil.longs.LongSet starts : source.getAllReferences().values()) {
                 for (long packed : starts) {
                     ChunkPos startPos = ChunkPos.unpack(packed);
-                    if (chunks.containsKey(startPos)) result.add(startPos);
+                    if (chunks.containsKey(startPos)) {
+                        result.add(startPos);
+                    }
                 }
             }
         }
@@ -1840,8 +1880,7 @@ final class V26_3TerrainEngine {
     }
 
     private static void materializePendingBlockEntities(ServerLevel level, ProtoChunk chunk) {
-        for (Map.Entry<BlockPos, CompoundTag> entry :
-                new ArrayList<>(chunk.getBlockEntityNbts().entrySet())) {
+        for (Map.Entry<BlockPos, CompoundTag> entry : new ArrayList<>(chunk.getBlockEntityNbts().entrySet())) {
             BlockPos pos = entry.getKey();
             CompoundTag tag = entry.getValue();
             // Malformed worldgen data must not make an otherwise valid regeneration batch
@@ -1856,8 +1895,8 @@ final class V26_3TerrainEngine {
             }
             if (tag == null) {
                 chunk.removeBlockEntity(pos);
-                Logging.logger().warning("[NmsTerrainGenerator] Discarded pending block entity with "
-                    + "no NBT at " + pos + " in chunk " + chunk.getPos());
+                Logging.logger().warning("[NmsTerrainGenerator] Discarded pending block entity with " + "no NBT at "
+                    + pos + " in chunk " + chunk.getPos());
                 continue;
             }
             BlockState state = chunk.getBlockState(pos);
@@ -1868,13 +1907,15 @@ final class V26_3TerrainEngine {
                     chunk.removeBlockEntity(pos);
                     continue;
                 }
-                blockEntity = ((net.minecraft.world.level.block.EntityBlock) state.getBlock())
-                    .newBlockEntity(pos, state);
+                blockEntity = ((net.minecraft.world.level.block.EntityBlock) state.getBlock()).newBlockEntity(pos,
+                    state);
             } else {
-                blockEntity = net.minecraft.world.level.block.entity.BlockEntity.loadStatic(
-                    pos, state, tag, level.registryAccess());
+                blockEntity = net.minecraft.world.level.block.entity.BlockEntity.loadStatic(pos, state, tag,
+                    level.registryAccess());
             }
-            if (blockEntity != null) chunk.setBlockEntity(blockEntity);
+            if (blockEntity != null) {
+                chunk.setBlockEntity(blockEntity);
+            }
         }
     }
 
@@ -1886,8 +1927,10 @@ final class V26_3TerrainEngine {
         Class<?> type = ProtoChunk.class;
         while (type != null) {
             try {
-                java.lang.reflect.Field field = type.getDeclaredField("pendingBlockEntities");
-                if (!field.trySetAccessible()) break;
+                Field field = type.getDeclaredField("pendingBlockEntities");
+                if (!field.trySetAccessible()) {
+                    break;
+                }
                 Object value = field.get(chunk);
                 if (value instanceof Map<?, ?> pending) {
                     pending.remove(null);
@@ -1897,8 +1940,7 @@ final class V26_3TerrainEngine {
             } catch (NoSuchFieldException ignored) {
                 type = type.getSuperclass();
             } catch (ReflectiveOperationException failure) {
-                throw new IllegalStateException(
-                    "Could not access ProtoChunk pending block entities", failure);
+                throw new IllegalStateException("Could not access ProtoChunk pending block entities", failure);
             }
         }
         throw new IllegalStateException("Could not locate ProtoChunk pending block entities");
@@ -1912,8 +1954,12 @@ final class V26_3TerrainEngine {
         if (bukkitChunk != null) {
             clearChunkPersistentData(bukkitChunk);
             for (org.bukkit.entity.Entity entity : bukkitChunk.getEntities()) {
-                if (entity instanceof org.bukkit.entity.Player) continue;
-                if (isExemptFromClear(entity)) continue;
+                if (entity instanceof org.bukkit.entity.Player) {
+                    continue;
+                }
+                if (isExemptFromClear(entity)) {
+                    continue;
+                }
                 entity.remove();
             }
         }
@@ -1922,7 +1968,8 @@ final class V26_3TerrainEngine {
         if (srcEntities != null && !srcEntities.isEmpty()) {
             for (CompoundTag entityTag : srcEntities) {
                 try {
-                    Entity entity = EntityType.loadEntityRecursive(entityTag, level, new EntitySpawnRequest(EntitySpawnReason.LOAD, false), e -> e);
+                    Entity entity = EntityType.loadEntityRecursive(entityTag, level, new EntitySpawnRequest(
+                        EntitySpawnReason.LOAD, false), e -> e);
                     if (entity != null) {
                         level.tryAddFreshEntityWithPassengers(entity);
                     }
@@ -1932,9 +1979,8 @@ final class V26_3TerrainEngine {
             }
         }
 
-        boolean blockEntitiesChanged = !target.getBlockEntitiesPos().isEmpty()
-            || !source.getBlockEntities().isEmpty();
-        for (BlockPos pos : new java.util.ArrayList<>(target.getBlockEntitiesPos())) {
+        boolean blockEntitiesChanged = !target.getBlockEntitiesPos().isEmpty() || !source.getBlockEntities().isEmpty();
+        for (BlockPos pos : new ArrayList<>(target.getBlockEntitiesPos())) {
             target.removeBlockEntity(pos);
         }
 
@@ -2009,35 +2055,29 @@ final class V26_3TerrainEngine {
 
         int minSectionY = target.getMinY() >> 4;
         if (anyBlockChanges) {
-        // Re-prime heightmaps for target chunk
-        java.util.Set<Heightmap.Types> heightmapTypes = java.util.EnumSet.of(
-            Heightmap.Types.MOTION_BLOCKING,
-            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-            Heightmap.Types.OCEAN_FLOOR,
-            Heightmap.Types.WORLD_SURFACE
-        );
-        Heightmap.primeHeightmaps(target, heightmapTypes);
+            Set<Heightmap.Types> heightmapTypes = EnumSet.of(Heightmap.Types.MOTION_BLOCKING,
+                Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE);
+            Heightmap.primeHeightmaps(target, heightmapTypes);
 
-        // Relight target chunk
-        var lightEngine = level.getChunkSource().getLightEngine();
-        for (int i = 0; i < targetSections.length; i++) {
-            boolean isEmpty = targetSections[i] == null || targetSections[i].hasOnlyAir();
-            lightEngine.updateSectionStatus(SectionPos.of(chunkPos, minSectionY + i), isEmpty);
-        }
-        try {
-            if (lightEngine instanceof ca.spottedleaf.moonrise.patches.starlight.light.StarLightLightingProvider starlightProvider) {
-                ca.spottedleaf.moonrise.patches.starlight.light.StarLightInterface starlightInterface =
-                    starlightProvider.starlight$getLightEngine();
-                Boolean[] emptySections = ca.spottedleaf.moonrise.patches.starlight.light.StarLightEngine.getEmptySectionsForChunk(target);
-                starlightInterface.lightChunk(target, emptySections);
-            } else {
-                var threadedLightEngine = (ThreadedLevelLightEngine) lightEngine;
-                threadedLightEngine.lightChunk(target, false).join();
+            var lightEngine = level.getChunkSource().getLightEngine();
+            for (int i = 0; i < targetSections.length; i++) {
+                boolean isEmpty = targetSections[i] == null || targetSections[i].hasOnlyAir();
+                lightEngine.updateSectionStatus(SectionPos.of(chunkPos, minSectionY + i), isEmpty);
             }
-            target.setLightCorrect(true);
-        } catch (Exception e) {
-            Logging.logger().severe("Failed to relight target chunk: " + e.getMessage(), e);
-        }
+            try {
+                if (lightEngine instanceof ca.spottedleaf.moonrise.patches.starlight.light.StarLightLightingProvider starlightProvider) {
+                    ca.spottedleaf.moonrise.patches.starlight.light.StarLightInterface starlightInterface = starlightProvider.starlight$getLightEngine();
+                    Boolean[] emptySections = ca.spottedleaf.moonrise.patches.starlight.light.StarLightEngine.getEmptySectionsForChunk(
+                        target);
+                    starlightInterface.lightChunk(target, emptySections);
+                } else {
+                    var threadedLightEngine = (ThreadedLevelLightEngine) lightEngine;
+                    threadedLightEngine.lightChunk(target, false).join();
+                }
+                target.setLightCorrect(true);
+            } catch (Exception e) {
+                Logging.logger().severe("Failed to relight target chunk: " + e.getMessage(), e);
+            }
         }
 
         // Trigger block updates and fluid ticks for the live chunk
@@ -2056,8 +2096,7 @@ final class V26_3TerrainEngine {
                     for (int x = 0; x < 16; x++) {
                         int worldX = chunkPos.x() * 16 + x;
                         mutablePos.set(worldX, worldY, worldZ);
-                        BlockState state = sec == null
-                            ? net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()
+                        BlockState state = sec == null ? net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()
                             : sec.getBlockState(x, y, z);
 
                         // 1. If it's a fluid, schedule a tick
@@ -2081,15 +2120,17 @@ final class V26_3TerrainEngine {
         }
 
         target.markUnsaved();
-        return new LiveApplyResult(changedSectionCount, unchangedSectionCount,
-            anyBlockChanges || anyBiomeChanges || blockEntitiesChanged);
+        return new LiveApplyResult(changedSectionCount, unchangedSectionCount, anyBlockChanges || anyBiomeChanges
+            || blockEntitiesChanged);
     }
 
     private static boolean sectionBlocksEqual(LevelChunkSection source, LevelChunkSection target) {
         for (int y = 0; y < 16; y++) {
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++) {
-                    if (source.getBlockState(x, y, z) != target.getBlockState(x, y, z)) return false;
+                    if (source.getBlockState(x, y, z) != target.getBlockState(x, y, z)) {
+                        return false;
+                    }
                 }
             }
         }
@@ -2101,31 +2142,51 @@ final class V26_3TerrainEngine {
             || !(target.getBiomes() instanceof PalettedContainer<Holder<Biome>> targetBiomes)) {
             return source.getBiomes() == target.getBiomes();
         }
-        for (int x = 0; x < 4; x++) for (int y = 0; y < 4; y++) for (int z = 0; z < 4; z++) {
-            if (!java.util.Objects.equals(sourceBiomes.get(x, y, z), targetBiomes.get(x, y, z))) return false;
+        for (int x = 0; x < 4; x++) {
+            for (int y = 0; y < 4; y++) {
+                for (int z = 0; z < 4; z++) {
+                    if (!Objects.equals(sourceBiomes.get(x, y, z), targetBiomes.get(x, y, z))) {
+                        return false;
+                    }
+                }
+            }
         }
         return true;
     }
 
     private static void copySectionBlocks(LevelChunkSection source, LevelChunkSection target) {
-        for (int y = 0; y < 16; y++) for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
-            target.setBlockState(x, y, z, source.getBlockState(x, y, z));
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    target.setBlockState(x, y, z, source.getBlockState(x, y, z));
+                }
+            }
         }
     }
 
     private static void copySectionBiomes(LevelChunkSection source, LevelChunkSection target) {
         if (!(source.getBiomes() instanceof PalettedContainer<Holder<Biome>> sourceBiomes)
-            || !(target.getBiomes() instanceof PalettedContainer<Holder<Biome>> targetBiomes)) return;
-        for (int x = 0; x < 4; x++) for (int y = 0; y < 4; y++) for (int z = 0; z < 4; z++) {
-            targetBiomes.set(x, y, z, sourceBiomes.get(x, y, z));
+            || !(target.getBiomes() instanceof PalettedContainer<Holder<Biome>> targetBiomes)) {
+            return;
+        }
+        for (int x = 0; x < 4; x++) {
+            for (int y = 0; y < 4; y++) {
+                for (int z = 0; z < 4; z++) {
+                    targetBiomes.set(x, y, z, sourceBiomes.get(x, y, z));
+                }
+            }
         }
     }
 
     private static BlockState[] captureEdgeStates(LevelChunkSection section) {
         BlockState[] states = new BlockState[4096];
-        for (int y = 0; y < 16; y++) for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
-            if (x == 0 || x == 15 || z == 0 || z == 15) {
-                states[(y * 16 + z) * 16 + x] = section.getBlockState(x, y, z);
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    if (x == 0 || x == 15 || z == 0 || z == 15) {
+                        states[(y * 16 + z) * 16 + x] = section.getBlockState(x, y, z);
+                    }
+                }
             }
         }
         return states;
@@ -2134,31 +2195,36 @@ final class V26_3TerrainEngine {
     /** A regenerated live chunk starts with no plugin-owned persistent data. */
     private static void clearChunkPersistentData(org.bukkit.Chunk chunk) {
         var pdc = chunk.getPersistentDataContainer();
-        for (org.bukkit.NamespacedKey key : new java.util.HashSet<>(pdc.getKeys())) {
+        for (org.bukkit.NamespacedKey key : new HashSet<>(pdc.getKeys())) {
             pdc.remove(key);
         }
     }
 
     private static class Logging {
+
         private static final github.freshchromatic.freshlib.util.Logging.LoggerProxy actualLogger = github.freshchromatic.freshlib.util.Logging.logger();
-        
+
         public static LoggerWrapper logger() {
             return new LoggerWrapper();
         }
     }
-    
+
     private static class LoggerWrapper {
+
         public void info(String msg) {
             if (debugLogging) {
                 Logging.actualLogger.info(msg);
             }
         }
+
         public void warning(String msg) {
             Logging.actualLogger.warning(msg);
         }
+
         public void severe(String msg) {
             Logging.actualLogger.severe(msg);
         }
+
         public void severe(String msg, Throwable t) {
             Logging.actualLogger.severe(msg, t);
         }

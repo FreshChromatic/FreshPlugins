@@ -3,7 +3,6 @@ pluginManagement {
         mavenLocal()
         maven(url = "https://artifactory.papermc.io/artifactory/snapshots")
         gradlePluginPortal()
-        mavenLocal()
     }
 }
 

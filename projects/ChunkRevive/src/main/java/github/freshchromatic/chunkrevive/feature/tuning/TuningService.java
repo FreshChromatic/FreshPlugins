@@ -4,6 +4,7 @@ import github.freshchromatic.chunkrevive.bootstrap.ChunkRevivePlugin;
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 
 public final class TuningService {
+
     private final ChunkRevivePlugin plugin;
 
     public TuningService(ChunkRevivePlugin plugin) {
@@ -24,7 +25,9 @@ public final class TuningService {
         Values.from(recommendation).writeTo(config);
         config.regen.memorySafety.enabled = true;
 
-        if (plugin.saveAndApplyConfig()) return true;
+        if (plugin.saveAndApplyConfig()) {
+            return true;
+        }
 
         previous.writeTo(config);
         return false;
@@ -40,58 +43,26 @@ public final class TuningService {
         }
     }
 
-    private record Values(
-        String generationThreads,
-        int generationPriority,
-        int batchDelayTicks,
-        int batchConcurrency,
-        int maxChunksPerBatch,
-        int workTileSize,
-        int applyBatchSize,
-        boolean memorySafetyEnabled,
-        String maxActiveBatches,
-        String memorySafeBatchSize,
-        String maxGenerationThreads,
-        int heapHighWatermarkPercent,
-        int scanThreads,
-        int scanPriority
-    ) {
+    private record Values(String generationThreads, int generationPriority, int batchDelayTicks, int batchConcurrency,
+        int maxChunksPerBatch, int workTileSize, int applyBatchSize, boolean memorySafetyEnabled,
+        String maxActiveBatches, String memorySafeBatchSize, String maxGenerationThreads, int heapHighWatermarkPercent,
+        int scanThreads, int scanPriority) {
+
         static Values capture(PluginConfig config) {
-            return new Values(
-                config.regen.threadPool.parallelism,
-                config.regen.threadPool.priority,
-                config.regen.batchDelayTicks,
-                config.regen.batchConcurrency,
-                config.regen.maxChunksPerBatch,
-                config.regen.workTileSize,
-                config.regen.applyBatchSize,
-                config.regen.memorySafety.enabled,
-                config.regen.memorySafety.maxActiveBatches,
-                config.regen.memorySafety.maxChunksPerBatch,
-                config.regen.memorySafety.maxGenerationThreads,
-                config.regen.memorySafety.heapHighWatermarkPercent,
-                config.scan.threadPool.parallelism,
-                config.scan.threadPool.priority
-            );
+            return new Values(config.regen.threadPool.parallelism, config.regen.threadPool.priority,
+                config.regen.batchDelayTicks, config.regen.batchConcurrency, config.regen.maxChunksPerBatch,
+                config.regen.workTileSize, config.regen.applyBatchSize, config.regen.memorySafety.enabled,
+                config.regen.memorySafety.maxActiveBatches, config.regen.memorySafety.maxChunksPerBatch,
+                config.regen.memorySafety.maxGenerationThreads, config.regen.memorySafety.heapHighWatermarkPercent,
+                config.scan.threadPool.parallelism, config.scan.threadPool.priority);
         }
 
         static Values from(TuningRecommendation recommendation) {
-            return new Values(
-                Integer.toString(recommendation.generationThreads()),
-                recommendation.generationPriority(),
-                recommendation.batchDelayTicks(),
-                recommendation.batchConcurrency(),
-                recommendation.maxChunksPerBatch(),
-                recommendation.workTileSize(),
-                recommendation.applyBatchSize(),
-                true,
-                recommendation.maxActiveBatches(),
-                recommendation.memorySafeMaxChunksPerBatch(),
-                recommendation.maxGenerationThreads(),
-                recommendation.heapHighWatermarkPercent(),
-                recommendation.scanThreads(),
-                recommendation.scanPriority()
-            );
+            return new Values(Integer.toString(recommendation.generationThreads()), recommendation.generationPriority(),
+                recommendation.batchDelayTicks(), recommendation.batchConcurrency(), recommendation.maxChunksPerBatch(),
+                recommendation.workTileSize(), recommendation.applyBatchSize(), true, recommendation.maxActiveBatches(),
+                recommendation.memorySafeMaxChunksPerBatch(), recommendation.maxGenerationThreads(),
+                recommendation.heapHighWatermarkPercent(), recommendation.scanThreads(), recommendation.scanPriority());
         }
 
         void writeTo(PluginConfig config) {

@@ -11,18 +11,17 @@ import java.io.File;
 
 public final class DatabaseFactory {
 
-    private DatabaseFactory() {}
+    private DatabaseFactory() {
+    }
 
     public static Database create(JavaPlugin plugin, PluginConfig.Database cfg) {
         if ("mysql".equalsIgnoreCase(cfg.type)) {
             Logging.logger().info("Using MySQL database at " + cfg.mysql.host + ":" + cfg.mysql.port);
-            return new MySqlDatabase(
-                cfg.mysql.host,
-                String.valueOf(cfg.mysql.port),
-                cfg.mysql.database,
-                cfg.mysql.username,
-                cfg.mysql.password
-            );
+            return new MySqlDatabase(cfg.mysql.host, String.valueOf(cfg.mysql.port), cfg.mysql.database,
+                cfg.mysql.username, cfg.mysql.password);
+        }
+        if (!"sqlite".equalsIgnoreCase(cfg.type)) {
+            throw new IllegalArgumentException("Unsupported database type: " + cfg.type);
         }
         File dbFile = new File(plugin.getDataFolder(), cfg.sqlite.file);
         dbFile.getParentFile().mkdirs();

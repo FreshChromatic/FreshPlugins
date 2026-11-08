@@ -46,7 +46,9 @@ When a comment is necessary, explain why the constraint exists. Do not narrate t
 - Align field names and `=` within a related, uninterrupted group. Start a new alignment group after a blank line; do not align unrelated groups, local variables, or ordinary assignment statements.
 - Keep constructor dependency assignments together, and separate them from collection initialization when that distinction improves readability. Use `this.field = parameter` when assigning constructor parameters to fields.
 - Keep a simple declaration and its initializer on the same line when they fit. Do not put `=` on a separate line from a short initializer.
-- Keep simple method calls, short lambdas, argument lists, and short call chains together when they fit. Do not require one argument, chained method, or nested call per line.
+- Keep simple method calls, short lambdas, argument lists, and short call chains together when they fit. For longer fluent chains, put each chained method on its own line and keep its arguments together when they fit. Do not wrap a chain midway through its arguments while joining multiple chained methods on the same line.
+- For a lambda containing a multiline fluent chain, break after `->` and indent the chain naturally, with each chained method on its own line.
+- Prefer imports and simple Java type names when there is no naming conflict. Use fully qualified names only when needed to resolve a conflict or for a clear contextual reason.
 - Wrap expressions only when their length or logical structure warrants it. Prefer natural argument or expression boundaries, and avoid staircase formatting for ordinary expressions.
 - Do not place multiple statements, branches, exception handlers, or method definitions on one line.
 - Keep control-flow blocks and multi-statement lambdas expanded with braces. Short expression lambdas may stay inline.
@@ -68,6 +70,25 @@ rows.add(SettingsAddon.StatusRow.info(tr("phase"), () -> tr("phase." + session.p
 ```
 
 Use multiple lines for substantial argument lists or actual blocks of logic, not for every syntactic layer of a simple call.
+
+Preferred for longer fluent chains and lambdas:
+
+```java
+manager.exceptionController()
+    .registerHandler(CommandExecutionException.class, this::commandExecution)
+    .registerHandler(CommandExecutionException.class, unwrappingHandler(CommandCompleted.class))
+    .registerHandler(CommandCompleted.class, this::commandCompleted)
+    .registerHandler(NoPermissionException.class, this::noPermission)
+    .registerHandler(ArgumentParseException.class, this::argumentParsing)
+    .registerHandler(InvalidCommandSenderException.class, this::invalidSender)
+    .registerHandler(InvalidSyntaxException.class, this::invalidSyntax);
+
+this.commands.registerSubcommand(builder ->
+    builder.literal("reload")
+        .commandDescription(richDescription(configManager.messages().command.description.reload))
+        .permission("freshlib.command.reload")
+        .handler(this::execute));
+```
 
 Preferred for related fields:
 

@@ -26,13 +26,13 @@ public final class CustomSerializers {
      */
     public static TypeSerializerCollection createAll() {
         return TypeSerializerCollection.builder()
-                .register(Color.class, new ColorSerializer())
-                .register(Pattern.class, new PatternSerializer())
-                .register(URL.class, new URLSerializer())
-                .register(Duration.class, new DurationSerializer())
-                .register(Messages.ComponentMessage.class, new ComponentMessageSerializer())
-                .register(Messages.StringMessage.class, new StringMessageSerializer())
-                .build();
+            .register(Color.class, new ColorSerializer())
+            .register(Pattern.class, new PatternSerializer())
+            .register(URL.class, new URLSerializer())
+            .register(Duration.class, new DurationSerializer())
+            .register(Messages.ComponentMessage.class, new ComponentMessageSerializer())
+            .register(Messages.StringMessage.class, new StringMessageSerializer())
+            .build();
     }
 
     /**
@@ -43,8 +43,8 @@ public final class CustomSerializers {
      */
     public static TypeSerializerCollection createMinimal() {
         return TypeSerializerCollection.builder()
-                .register(Messages.ComponentMessage.class, new ComponentMessageSerializer())
-                .register(Messages.StringMessage.class, new StringMessageSerializer())
-                .build();
+            .register(Messages.ComponentMessage.class, new ComponentMessageSerializer())
+            .register(Messages.StringMessage.class, new StringMessageSerializer())
+            .build();
     }
 }

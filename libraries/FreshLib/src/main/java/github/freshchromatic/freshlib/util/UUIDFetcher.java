@@ -5,20 +5,19 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
-import github.freshchromatic.freshlib.util.Logging;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.HashMap;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
-
 
 /*
     From: https://gist.github.com/Jofkos/d0c469528b032d820f42
@@ -33,15 +32,17 @@ public class UUIDFetcher {
      */
     public static final long FEBRUARY_2015 = 1422748800000L;
     // Utilizes FreshLib's built-in static Logging library
-    private static final String UUID_URL = "https://api.minecraftservices.com/users/profiles/minecraft/%s?at=%d";
-    private static final String NAME_URL = "https://api.minecraftservices.com/user/profile/%s";
-    private static Gson gson = new GsonBuilder().registerTypeAdapter(UUID.class, new UUIDTypeAdapter()).create();
-    private static Map<String, UUID> uuidCache = new HashMap<String, UUID>();
-    private static Map<UUID, String> nameCache = new HashMap<UUID, String>();
-    private static ExecutorService pool = Executors.newCachedThreadPool();
+    private static final String                   UUID_URL            = "https://api.minecraftservices.com/users/profiles/minecraft/%s?at=%d";
+    private static final String                   NAME_URL            = "https://api.minecraftservices.com/user/profile/%s";
+    private static final Gson                     gson                = new GsonBuilder().registerTypeAdapter(
+        UUID.class, new UUIDTypeAdapter()).create();
+    private static final Map<String, UUID>        currentUuidCache    = new ConcurrentHashMap<>();
+    private static final Map<UuidLookupKey, UUID> historicalUuidCache = new ConcurrentHashMap<>();
+    private static final Map<UUID, String>        nameCache           = new ConcurrentHashMap<>();
+    private static final ExecutorService          pool                = Executors.newCachedThreadPool();
 
     private String name;
-    private UUID id;
+    private UUID   id;
 
     /**
      * Fetches the uuid asynchronously and passes it to the consumer
@@ -60,7 +61,19 @@ public class UUIDFetcher {
      * @return The uuid
      */
     public static UUID getUUID(String name) {
-        return getUUIDAt(name, System.currentTimeMillis());
+        String normalizedName = normalizeName(name);
+        if (normalizedName == null) {
+            return null;
+        }
+        UUID cachedUuid = currentUuidCache.get(normalizedName);
+        if (cachedUuid != null) {
+            return cachedUuid;
+        }
+        UUID uuid = getUUIDAt(normalizedName, System.currentTimeMillis());
+        if (uuid != null) {
+            currentUuidCache.put(normalizedName, uuid);
+        }
+        return uuid;
     }
 
     /**
@@ -82,23 +95,54 @@ public class UUIDFetcher {
      * @see UUIDFetcher#FEBRUARY_2015
      */
     public static UUID getUUIDAt(String name, long timestamp) {
-        name = name.toLowerCase();
-        if (uuidCache.containsKey(name)) {
-            return uuidCache.get(name);
+        String normalizedName = normalizeName(name);
+        if (normalizedName == null) {
+            return null;
+        }
+        UuidLookupKey cacheKey = lookupKey(normalizedName, timestamp);
+        long timestampSeconds = cacheKey.timestampSeconds();
+        UUID cachedUuid = historicalUuidCache.get(cacheKey);
+        if (cachedUuid != null) {
+            return cachedUuid;
         }
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(String.format(UUID_URL, name, timestamp / 1000)).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) new URL(String.format(Locale.ROOT, UUID_URL,
+                normalizedName, timestampSeconds)).openConnection();
+            connection.setConnectTimeout(5000);
             connection.setReadTimeout(5000);
-            UUIDFetcher data = gson.fromJson(new BufferedReader(new InputStreamReader(connection.getInputStream())), UUIDFetcher.class);
+            UUIDFetcher data;
+            try (var reader = new BufferedReader(new InputStreamReader(connection.getInputStream(),
+                StandardCharsets.UTF_8))) {
+                data = gson.fromJson(reader, UUIDFetcher.class);
+            } finally {
+                connection.disconnect();
+            }
 
-            uuidCache.put(name, data.id);
-            nameCache.put(data.id, data.name);
+            historicalUuidCache.put(cacheKey, data.id);
 
             return data.id;
         } catch (Exception e) {
-            Logging.logger().severe("Could not fetch UUID for name: " + name, e);
+            Logging.logger().severe("Could not fetch UUID for name: " + normalizedName, e);
             return null;
         }
+    }
+
+    private static String normalizeName(String name) {
+        if (name == null || name.isEmpty() || name.length() > 16) {
+            return null;
+        }
+        for (int index = 0; index < name.length(); index++) {
+            char character = name.charAt(index);
+            if (!(character >= 'a' && character <= 'z') && !(character >= 'A' && character <= 'Z') && !(character >= '0'
+                && character <= '9') && character != '_') {
+                return null;
+            }
+        }
+        return name.toLowerCase(Locale.ROOT);
+    }
+
+    static UuidLookupKey lookupKey(String normalizedName, long timestamp) {
+        return new UuidLookupKey(normalizedName, timestamp / 1000);
     }
 
     /**
@@ -118,15 +162,26 @@ public class UUIDFetcher {
      * @return The name
      */
     public static String getName(UUID uuid) {
+        if (uuid == null) {
+            return null;
+        }
         if (nameCache.containsKey(uuid)) {
             return nameCache.get(uuid);
         }
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(String.format(NAME_URL, UUIDTypeAdapter.fromUUID(uuid))).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) new URL(String.format(Locale.ROOT, NAME_URL,
+                UUIDTypeAdapter.fromUUID(uuid))).openConnection();
+            connection.setConnectTimeout(5000);
             connection.setReadTimeout(5000);
-            UUIDFetcher currentNameData = gson.fromJson(new BufferedReader(new InputStreamReader(connection.getInputStream())), UUIDFetcher.class);
+            UUIDFetcher currentNameData;
+            try (var reader = new BufferedReader(new InputStreamReader(connection.getInputStream(),
+                StandardCharsets.UTF_8))) {
+                currentNameData = gson.fromJson(reader, UUIDFetcher.class);
+            } finally {
+                connection.disconnect();
+            }
 
-            uuidCache.put(currentNameData.name.toLowerCase(), uuid);
+            currentUuidCache.put(currentNameData.name.toLowerCase(Locale.ROOT), uuid);
             nameCache.put(uuid, currentNameData.name);
 
             return currentNameData.name;
@@ -138,7 +193,10 @@ public class UUIDFetcher {
 
 }
 
+record UuidLookupKey(String name, long timestampSeconds) {}
+
 class UUIDTypeAdapter extends TypeAdapter<UUID> {
+
     public static String fromUUID(UUID value) {
         return value.toString().replace("-", "");
     }

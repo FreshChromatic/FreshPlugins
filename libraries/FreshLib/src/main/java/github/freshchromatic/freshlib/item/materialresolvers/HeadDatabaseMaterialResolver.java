@@ -21,7 +21,8 @@ public final class HeadDatabaseMaterialResolver implements MaterialResolver {
     @Override
     public ItemStack resolve(String materialTag, Player player) {
         if (!Bukkit.getPluginManager().isPluginEnabled("HeadDatabase")) {
-            Logging.logger().warning("Material tag \"" + materialTag + "\" requires the HeadDatabase plugin, which isn't installed.");
+            Logging.logger().warning("Material tag \"" + materialTag
+                + "\" requires the HeadDatabase plugin, which isn't installed.");
             return new ItemStack(Material.BARRIER);
         }
         String id = materialTag.trim().substring("[hdb]".length()).trim();

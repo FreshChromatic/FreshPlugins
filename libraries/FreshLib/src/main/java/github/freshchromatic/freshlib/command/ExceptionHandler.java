@@ -39,6 +39,7 @@ import static net.kyori.adventure.text.format.TextDecoration.ITALIC;
 import static org.incendo.cloud.exception.handling.ExceptionHandler.unwrappingHandler;
 
 public final class ExceptionHandler {
+
     private final ConfigManager configManager;
 
     @Inject
@@ -82,16 +83,19 @@ public final class ExceptionHandler {
 
     private void argumentParsing(final ExceptionContext<Commander, ArgumentParseException> ctx) {
         final Throwable cause = ctx.exception().getCause();
-        final Supplier<Component> fallback = () -> Objects.requireNonNull(ComponentMessageThrowable.getOrConvertMessage(cause));
+        final Supplier<Component> fallback = () -> Objects.requireNonNull(ComponentMessageThrowable.getOrConvertMessage(
+            cause));
         final Component message;
         if (cause instanceof final ParserException parserException) {
             final TagResolver[] placeholders = Arrays.stream(parserException.captionVariables())
-                .map(variable -> Components.placeholder(NamingSchemes.SNAKE_CASE.coerce(variable.key()), variable.value()))
+                .map(
+                variable -> Components.placeholder(NamingSchemes.SNAKE_CASE.coerce(variable.key()), variable.value()))
                 .toArray(TagResolver[]::new);
             final String key = parserException.errorCaption().key().replace("argument.parse.failure.", "");
             Component fromConfig;
             try {
-                fromConfig = configManager.messages().command.message.parserException.getMessage(key).withPlaceholders(placeholders);
+                fromConfig = configManager.messages().command.message.parserException.getMessage(key).withPlaceholders(
+                    placeholders);
             } catch (final Exception ex) {
                 fromConfig = null;
             }
@@ -100,41 +104,30 @@ public final class ExceptionHandler {
             message = fallback.get();
         }
         final Component finalMessage = message;
-        decorateAndSend(
-            ctx.context().sender(),
-            configManager.messages().command.message.exception.invalidArgument.withPlaceholders(Components.placeholder("message", finalMessage))
-        );
+        decorateAndSend(ctx.context().sender(),
+            configManager.messages().command.message.exception.invalidArgument.withPlaceholders(Components.placeholder(
+                "message", finalMessage)));
     }
 
     private void invalidSender(final ExceptionContext<Commander, InvalidCommandSenderException> ctx) {
-        final Component requiredSender = Component.join(
-            JoinConfiguration.separator(text(" or ")),
-            ctx.exception().requiredSenderTypes().stream()
-                .map(TypeUtils::simpleName)
-                .map(Component::text)
-                .toList()
-        );
+        final Component requiredSender = Component.join(JoinConfiguration.separator(text(" or ")),
+            ctx.exception().requiredSenderTypes().stream().map(TypeUtils::simpleName).map(Component::text).toList());
         final Component message = configManager.messages().command.message.exception.invalidSenderType.withPlaceholders(
-            Components.placeholder("required_sender_type", requiredSender)
-        );
+            Components.placeholder("required_sender_type", requiredSender));
         decorateAndSend(ctx.context().sender(), message);
     }
 
     private void invalidSyntax(final ExceptionContext<Commander, InvalidSyntaxException> ctx) {
         final Component message = configManager.messages().command.message.exception.invalidSyntax.withPlaceholders(
-            Components.placeholder("correct_syntax",
-                Components.highlightSpecialCharacters(text("/%s".formatted(ctx.exception().correctSyntax())), WHITE))
-        );
+            Components.placeholder("correct_syntax", Components.highlightSpecialCharacters(text("/%s".formatted(
+                ctx.exception().correctSyntax())), WHITE)));
         decorateAndSend(ctx.context().sender(), message);
     }
 
     private void decorateAndSend(final Audience audience, final ComponentLike componentLike) {
-        final Component message = textOfChildren(
-            configManager.messages().command.prefix.asComponent()
-                .hoverEvent(configManager.messages().clickForHelp.asComponent())
-                .clickEvent(runCommand("/%s help".formatted(configManager.config().settings.commands.mainCommandLabel))),
-            componentLike
-        );
+        final Component message = textOfChildren(configManager.messages().command.prefix.asComponent()
+            .hoverEvent(configManager.messages().clickForHelp.asComponent())
+            .clickEvent(runCommand("/%s help".formatted(configManager.config().settings.commands.mainCommandLabel))), componentLike);
         audience.sendMessage(message);
     }
 
@@ -145,9 +138,7 @@ public final class ExceptionHandler {
         final TextComponent.Builder hoverText = text();
         final Component throwableMessage = ComponentMessageThrowable.getOrConvertMessage(cause);
         if (throwableMessage != null) {
-            hoverText.append(throwableMessage)
-                .append(newline())
-                .append(newline());
+            hoverText.append(throwableMessage).append(newline()).append(newline());
         }
         hoverText.append(text(stackTrace))
             .append(newline())

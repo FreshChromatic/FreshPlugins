@@ -5,7 +5,9 @@ import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.function.Predicate;
 
@@ -14,21 +16,30 @@ public final class ResetStrategyPlanner {
 
     public record RegionTarget(String world, AnvilRegionPos region) {}
 
-    public record Plan(List<RegionTarget> deleteRegions,
-                       List<MarkedChunk> deleteChunks,
-                       List<MarkedChunk> regenerateChunks) {
+    public record Plan(List<RegionTarget> deleteRegions, List<MarkedChunk> deleteChunks,
+        List<MarkedChunk> regenerateChunks) {
+
+        public Plan {
+            deleteRegions = List.copyOf(deleteRegions);
+            deleteChunks = List.copyOf(deleteChunks);
+            regenerateChunks = List.copyOf(regenerateChunks);
+        }
+
         public boolean isEmpty() {
             return deleteRegions.isEmpty() && deleteChunks.isEmpty() && regenerateChunks.isEmpty();
         }
+
+        public boolean requiresConfirmation(int targetCount, int threshold) {
+            return !deleteRegions.isEmpty() || !deleteChunks.isEmpty() || targetCount > threshold;
+        }
     }
 
-    private ResetStrategyPlanner() {}
+    private ResetStrategyPlanner() {
+    }
 
-    public static Plan plan(Collection<MarkedChunk> targets,
-                            ResetMethod defaultMethod,
-                            ResetMethod completeRegionMethod,
-                            ResetMethod incompleteRegionMethod,
-                            Predicate<RegionTarget> safeCompleteRegion) {
+    public static Plan plan(Collection<MarkedChunk> targets, ResetMethod defaultMethod,
+        ResetMethod completeRegionMethod, ResetMethod incompleteRegionMethod,
+        Predicate<RegionTarget> safeCompleteRegion) {
         Map<RegionTarget, List<MarkedChunk>> grouped = new LinkedHashMap<>();
         for (MarkedChunk chunk : targets) {
             RegionTarget key = new RegionTarget(chunk.world(), AnvilRegionPos.fromChunk(chunk.cx(), chunk.cz()));
@@ -53,22 +64,27 @@ public final class ResetStrategyPlanner {
                 regenerated.addAll(entry.getValue());
             }
         }
-        return new Plan(List.copyOf(regions), List.copyOf(deletedChunks), List.copyOf(regenerated));
+        return new Plan(regions, deletedChunks, regenerated);
     }
 
     public static ResetMethod resolve(ResetMethod configured, ResetMethod defaultMethod, boolean completeRegion) {
         ResetMethod resolved = configured == ResetMethod.DEFAULT ? defaultMethod : configured;
-        if (resolved == ResetMethod.DEFAULT) resolved = ResetMethod.REGENERATE;
-        return !completeRegion && resolved == ResetMethod.DELETE_REGION
-            ? ResetMethod.REGENERATE : resolved;
+        if (resolved == ResetMethod.DEFAULT) {
+            resolved = ResetMethod.REGENERATE;
+        }
+        return !completeRegion && resolved == ResetMethod.DELETE_REGION ? ResetMethod.REGENERATE : resolved;
     }
 
     private static boolean coversWholeRegion(AnvilRegionPos region, List<MarkedChunk> chunks) {
-        if (chunks.size() != AnvilRegionPos.WIDTH * AnvilRegionPos.WIDTH) return false;
-        java.util.Set<Long> positions = new java.util.HashSet<>();
+        if (chunks.size() != AnvilRegionPos.WIDTH * AnvilRegionPos.WIDTH) {
+            return false;
+        }
+        Set<Long> positions = new HashSet<>();
         for (MarkedChunk chunk : chunks) {
-            if (chunk.cx() < region.minChunkX() || chunk.cx() > region.maxChunkX()
-                || chunk.cz() < region.minChunkZ() || chunk.cz() > region.maxChunkZ()) return false;
+            if (chunk.cx() < region.minChunkX() || chunk.cx() > region.maxChunkX() || chunk.cz() < region.minChunkZ()
+                || chunk.cz() > region.maxChunkZ()) {
+                return false;
+            }
             positions.add((((long) chunk.cx()) << 32) ^ (chunk.cz() & 0xffffffffL));
         }
         return positions.size() == AnvilRegionPos.WIDTH * AnvilRegionPos.WIDTH;

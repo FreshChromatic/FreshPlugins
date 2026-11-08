@@ -1,7 +1,6 @@
 package github.freshchromatic.chunkrevive.presentation.command;
 
 import github.freshchromatic.chunkrevive.bootstrap.ChunkRevivePlugin;
-import github.freshchromatic.chunkrevive.presentation.command.ConfirmationManager;
 import github.freshchromatic.chunkrevive.presentation.display.AdminTuiBuilder;
 import github.freshchromatic.chunkrevive.presentation.display.TuningTuiBuilder;
 import github.freshchromatic.chunkrevive.config.Messages;
@@ -18,19 +17,16 @@ import org.incendo.cloud.context.CommandContext;
 
 /** Handles the complete {@code /cr tune} workflow. */
 public final class TuningCommands {
-    private final ChunkRevivePlugin plugin;
-    private final MarkRegistry markRegistry;
-    private final DiskChunkScanner scanner;
-    private final ConfirmationManager confirmations;
-    private final TuningService tuningService;
-    private Messages messages;
 
-    public TuningCommands(
-            ChunkRevivePlugin plugin,
-            MarkRegistry markRegistry,
-            DiskChunkScanner scanner,
-            ConfirmationManager confirmations,
-            Messages messages) {
+    private final ChunkRevivePlugin   plugin;
+    private final MarkRegistry        markRegistry;
+    private final DiskChunkScanner    scanner;
+    private final ConfirmationManager confirmations;
+    private final TuningService       tuningService;
+    private Messages                  messages;
+
+    public TuningCommands(ChunkRevivePlugin plugin, MarkRegistry markRegistry, DiskChunkScanner scanner,
+        ConfirmationManager confirmations, Messages messages) {
         this.plugin = plugin;
         this.markRegistry = markRegistry;
         this.scanner = scanner;
@@ -46,23 +42,26 @@ public final class TuningCommands {
     public void overview(CommandContext<Commander> context) {
         var resources = tuningService.captureResources();
         var recommended = TuningCalculator.recommendedProfile(resources);
-        TuningTuiBuilder.overview(messages.tuning, resources, recommended)
-            .forEach(context.sender()::sendMessage);
+        TuningTuiBuilder.overview(messages.tuning, resources, recommended).forEach(context.sender()::sendMessage);
     }
 
     public void preview(CommandContext<Commander> context) {
         TuningProfile profile = resolveProfile(context);
-        if (profile == null) return;
+        if (profile == null) {
+            return;
+        }
         var resources = tuningService.captureResources();
         var recommendation = tuningService.calculate(resources, profile);
-        TuningTuiBuilder.preview(messages.tuning, plugin.getPluginConfig(), resources, recommendation)
-            .forEach(context.sender()::sendMessage);
+        TuningTuiBuilder.preview(messages.tuning, plugin.getPluginConfig(), resources, recommendation).forEach(
+            context.sender()::sendMessage);
     }
 
     public void apply(CommandContext<Commander> context, boolean confirmed) {
         var sender = context.sender();
         TuningProfile profile = resolveProfile(context);
-        if (profile == null) return;
+        if (profile == null) {
+            return;
+        }
 
         if (markRegistry.getRegenerationQueue().isRunning() || scanner.isRunning()) {
             sender.sendMessage(messages.tuning.busy.asComponent());
@@ -75,15 +74,12 @@ public final class TuningCommands {
             confirmations.request(sender.commanderId(), confirmationKey, timeout);
             Component mode = TuningTuiBuilder.profileLabel(messages.tuning, profile);
             sender.sendMessage(AdminTuiBuilder.line(messages.tuning.confirmRequired.withPlaceholders(
-                Placeholder.component("mode", mode),
-                Placeholder.unparsed("timeout", Integer.toString(timeout)))));
-            sender.sendMessage(AdminTuiBuilder.actionBar(AdminTuiBuilder.row(
-                AdminTuiBuilder.normalButton(messages.tuning.buttonCancel.asComponent(),
-                    ClickEvent.runCommand("/cr tune preview " + profile.commandName()), messages.tuning.hoverCancel.asComponent()),
-                AdminTuiBuilder.severeButton(messages.tuning.buttonConfirm.asComponent(),
-                    ClickEvent.runCommand("/cr tune apply " + profile.commandName() + " --confirm"),
-                    messages.tuning.hoverConfirm.asComponent())
-            )));
+                Placeholder.component("mode", mode), Placeholder.unparsed("timeout", Integer.toString(timeout)))));
+            sender.sendMessage(AdminTuiBuilder.actionBar(AdminTuiBuilder.row(AdminTuiBuilder.normalButton(
+                messages.tuning.buttonCancel.asComponent(), ClickEvent.runCommand("/cr tune preview "
+                    + profile.commandName()), messages.tuning.hoverCancel.asComponent()), AdminTuiBuilder.severeButton(
+                        messages.tuning.buttonConfirm.asComponent(), ClickEvent.runCommand("/cr tune apply "
+                            + profile.commandName() + " --confirm"), messages.tuning.hoverConfirm.asComponent()))));
             return;
         }
 
@@ -97,16 +93,18 @@ public final class TuningCommands {
             sender.sendMessage(messages.tuning.saveFailed.asComponent());
             return;
         }
-        sender.sendMessage(messages.tuning.applied.withPlaceholders(
-            Placeholder.component("mode", TuningTuiBuilder.profileLabel(messages.tuning, profile))));
+        sender.sendMessage(messages.tuning.applied.withPlaceholders(Placeholder.component("mode",
+            TuningTuiBuilder.profileLabel(messages.tuning, profile))));
     }
 
     private TuningProfile resolveProfile(CommandContext<Commander> context) {
         String raw = context.get("profile");
         var profile = TuningProfile.parse(raw);
-        if (profile.isPresent()) return profile.get();
-        context.sender().sendMessage(messages.tuning.unknownProfile.withPlaceholders(
-            Placeholder.unparsed("profile", raw)));
+        if (profile.isPresent()) {
+            return profile.get();
+        }
+        context.sender().sendMessage(messages.tuning.unknownProfile.withPlaceholders(Placeholder.unparsed("profile",
+            raw)));
         return null;
     }
 }

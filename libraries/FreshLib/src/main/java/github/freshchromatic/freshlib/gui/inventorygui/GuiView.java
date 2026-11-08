@@ -10,31 +10,28 @@ import org.jetbrains.annotations.ApiStatus;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
-import java.util.WeakHashMap;
 
 @ApiStatus.Internal
 public class GuiView {
 
-    private static final MethodHandle GET_TOP_INVENTORY = unreflect("getTopInventory");
+    private static final MethodHandle GET_TOP_INVENTORY    = unreflect("getTopInventory");
     private static final MethodHandle GET_BOTTOM_INVENTORY = unreflect("getBottomInventory");
-    private static final MethodHandle GET_PLAYER = unreflect("getPlayer");
-    private static final MethodHandle GET_TYPE = unreflect("getType");
-    private static final MethodHandle SET_ITEM = unreflect("setItem");
-    private static final MethodHandle GET_ITEM = unreflect("getItem");
-    private static final MethodHandle SET_CURSOR = unreflect("setCursor");
-    private static final MethodHandle GET_CURSOR = unreflect("getCursor");
-    private static final MethodHandle GET_INVENTORY = unreflect("getInventory");
-    private static final MethodHandle CONVERT_SLOT = unreflect("convertSlot");
-    private static final MethodHandle GET_SLOT_TYPE = unreflect("getSlotType");
-    private static final MethodHandle CLOSE = unreflect("close");
-    private static final MethodHandle COUNT_SLOTS = unreflect("countSlots");
-    private static final MethodHandle SET_PROPERTY = unreflect("setProperty");
-    private static final MethodHandle GET_TITLE = unreflect("getTitle");
-
-    private static final WeakHashMap<InventoryView, GuiView> VIEWS = new WeakHashMap<>();
+    private static final MethodHandle GET_PLAYER           = unreflect("getPlayer");
+    private static final MethodHandle GET_TYPE             = unreflect("getType");
+    private static final MethodHandle SET_ITEM             = unreflect("setItem");
+    private static final MethodHandle GET_ITEM             = unreflect("getItem");
+    private static final MethodHandle SET_CURSOR           = unreflect("setCursor");
+    private static final MethodHandle GET_CURSOR           = unreflect("getCursor");
+    private static final MethodHandle GET_INVENTORY        = unreflect("getInventory");
+    private static final MethodHandle CONVERT_SLOT         = unreflect("convertSlot");
+    private static final MethodHandle GET_SLOT_TYPE        = unreflect("getSlotType");
+    private static final MethodHandle CLOSE                = unreflect("close");
+    private static final MethodHandle COUNT_SLOTS          = unreflect("countSlots");
+    private static final MethodHandle SET_PROPERTY         = unreflect("setProperty");
+    private static final MethodHandle GET_TITLE            = unreflect("getTitle");
 
     public static GuiView of(InventoryView view) {
-        return VIEWS.computeIfAbsent(view, k -> new GuiView(view));
+        return new GuiView(view);
     }
 
     private final InventoryView view;
@@ -64,8 +61,8 @@ public class GuiView {
             SET_ITEM.invoke(view, slot, item);
         } catch (RuntimeException e) {
             throw e;
-        } catch (Throwable t) {
-            throw new AssertionError(t);
+        } catch (Throwable failure) {
+            throw invocationFailure(failure);
         }
     }
 
@@ -78,8 +75,8 @@ public class GuiView {
             SET_CURSOR.invoke(view, item);
         } catch (RuntimeException e) {
             throw e;
-        } catch (Throwable t) {
-            throw new AssertionError(t);
+        } catch (Throwable failure) {
+            throw invocationFailure(failure);
         }
     }
 
@@ -104,8 +101,8 @@ public class GuiView {
             CLOSE.invoke(view);
         } catch (RuntimeException e) {
             throw e;
-        } catch (Throwable t) {
-            throw new AssertionError(t);
+        } catch (Throwable failure) {
+            throw invocationFailure(failure);
         }
     }
 
@@ -115,11 +112,11 @@ public class GuiView {
 
     public boolean setProperty(InventoryView.Property prop, int value) {
         try {
-            return (boolean) SET_PROPERTY.invoke(prop, value);
+            return (boolean) SET_PROPERTY.invoke(view, prop, value);
         } catch (RuntimeException e) {
             throw e;
-        } catch (Throwable t) {
-            throw new AssertionError(t);
+        } catch (Throwable failure) {
+            throw invocationFailure(failure);
         }
     }
 
@@ -133,8 +130,8 @@ public class GuiView {
             return (T) method.invoke(view);
         } catch (RuntimeException e) {
             throw e;
-        } catch (Throwable t) {
-            throw new AssertionError(t);
+        } catch (Throwable failure) {
+            throw invocationFailure(failure);
         }
     }
 
@@ -144,9 +141,16 @@ public class GuiView {
             return (T) method.invoke(view, slot);
         } catch (RuntimeException e) {
             throw e;
-        } catch (Throwable t) {
-            throw new AssertionError(t);
+        } catch (Throwable failure) {
+            throw invocationFailure(failure);
         }
+    }
+
+    private static AssertionError invocationFailure(Throwable failure) {
+        if (failure instanceof Error error) {
+            throw error;
+        }
+        return new AssertionError(failure);
     }
 
     private static MethodHandle unreflect(String name) {
@@ -154,10 +158,10 @@ public class GuiView {
             if (method.getName().equals(name)) {
                 try {
                     return MethodHandles.lookup().unreflect(method);
-                } catch (Throwable ignored) { }
+                } catch (IllegalAccessException ignored) {
+                }
             }
         }
         return null;
     }
 }
-

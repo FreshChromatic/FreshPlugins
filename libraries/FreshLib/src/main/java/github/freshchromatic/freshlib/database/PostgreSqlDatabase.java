@@ -1,8 +1,11 @@
 package github.freshchromatic.freshlib.database;
 
+import github.freshchromatic.freshlib.util.Logging;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class PostgreSqlDatabase implements Database {
 
@@ -11,7 +14,7 @@ public class PostgreSqlDatabase implements Database {
     protected final String database;
     protected final String username;
     protected final String password;
-    protected Connection connection;
+    protected Connection   connection;
 
     public PostgreSqlDatabase(String host, String port, String database, String username, String password) {
         this.host = host;
@@ -29,11 +32,11 @@ public class PostgreSqlDatabase implements Database {
                 return true;
             }
 
-//            Class.forName("jdbc:postgresql/.jdbc.Driver");
-            connection = DriverManager.getConnection("jdbc:postgresql://" + host + ":" + port + "/" + database, username, password);
+            connection = DriverManager.getConnection("jdbc:postgresql://" + host + ":" + port + "/" + database,
+                username, password);
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not connect to PostgreSQL: " + e.getMessage(), e);
             return false;
         }
     }
@@ -41,7 +44,7 @@ public class PostgreSqlDatabase implements Database {
     @Override
     public boolean close() {
         try {
-            if (!isConnected()) {
+            if (connection == null) {
                 return true;
             }
 
@@ -49,14 +52,18 @@ public class PostgreSqlDatabase implements Database {
             connection = null;
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not close PostgreSQL connection: " + e.getMessage(), e);
             return false;
         }
     }
 
     @Override
     public boolean isConnected() {
-        return connection != null;
+        try {
+            return connection != null && !connection.isClosed();
+        } catch (SQLException failure) {
+            return false;
+        }
     }
 
     @Override
@@ -67,22 +74,32 @@ public class PostgreSqlDatabase implements Database {
     @Override
     public boolean executeNonQuery(String sql) {
         try {
-            connection.createStatement().execute(sql);
+            try (var statement = connection.createStatement()) {
+                statement.execute(sql);
+            }
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not execute PostgreSQL statement: " + e.getMessage(), e);
             return false;
         }
     }
 
     @Override
+    @Deprecated
     public ResultSet executeQuery(String query) {
         try {
             ResultSet resultSet = connection.createStatement().executeQuery(query);
             return resultSet;
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not execute PostgreSQL query: " + e.getMessage(), e);
             return null;
+        }
+    }
+
+    @Override
+    public <T> T executeQuery(String query, ResultSetHandler<T> handler) throws SQLException {
+        try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(query)) {
+            return handler.handle(resultSet);
         }
     }
 }

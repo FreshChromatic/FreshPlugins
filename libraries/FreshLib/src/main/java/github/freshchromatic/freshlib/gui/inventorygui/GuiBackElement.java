@@ -72,7 +72,7 @@ public class GuiBackElement extends StaticGuiElement {
     }
 
     private boolean canGoBack(HumanEntity who) {
-        return InventoryGui.getHistory(who).size() > 1 || (InventoryGui.getHistory(who).size() == 1 && InventoryGui.getHistory(who).peekLast() != gui);
+        return InventoryGui.getHistory(who).size() > 1 || (InventoryGui.getHistory(who).size() == 1
+            && InventoryGui.getHistory(who).peekLast() != gui);
     }
 }
-

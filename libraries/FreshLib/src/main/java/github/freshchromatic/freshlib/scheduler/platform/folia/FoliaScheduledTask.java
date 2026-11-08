@@ -29,24 +29,37 @@ import java.util.Objects;
 public class FoliaScheduledTask implements PlatformScheduledTask<ScheduledTask> {
 
     private final ScheduledTask task;
+    private final Plugin        owner;
 
     public FoliaScheduledTask(ScheduledTask task) {
-        this.task = task;
+        this.task = Objects.requireNonNull(task);
+        this.owner = task.getOwningPlugin();
+    }
+
+    private FoliaScheduledTask(Plugin owner) {
+        this.task = null;
+        this.owner = owner;
+    }
+
+    static FoliaScheduledTask forEntity(Plugin owner, ScheduledTask task) {
+        return task == null ? new FoliaScheduledTask(owner) : new FoliaScheduledTask(task);
     }
 
     @Override
     public boolean isCancelled() {
-        return task.isCancelled();
+        return task == null || task.isCancelled();
     }
 
     @Override
     public void cancel() {
-        task.cancel();
+        if (task != null) {
+            task.cancel();
+        }
     }
 
     @Override
     public Plugin getOwner() {
-        return task.getOwningPlugin();
+        return owner;
     }
 
     @Override
@@ -56,13 +69,15 @@ public class FoliaScheduledTask implements PlatformScheduledTask<ScheduledTask> 
 
     @Override
     public boolean equals(Object object) {
-        if (object == null || getClass() != object.getClass()) return false;
+        if (object == null || getClass() != object.getClass()) {
+            return false;
+        }
         FoliaScheduledTask that = (FoliaScheduledTask) object;
-        return Objects.equals(task, that.task);
+        return task == null ? this == that : Objects.equals(task, that.task);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(task);
+        return task == null ? System.identityHashCode(this) : Objects.hashCode(task);
     }
 }

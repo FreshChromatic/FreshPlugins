@@ -20,7 +20,8 @@ public class StringMessageSerializer implements TypeSerializer<StringMessage> {
     }
 
     @Override
-    public void serialize(Type type, @Nullable StringMessage obj, ConfigurationNode node) throws SerializationException {
+    public void serialize(Type type, @Nullable StringMessage obj, ConfigurationNode node)
+        throws SerializationException {
         if (obj == null) {
             node.set(null);
         } else {

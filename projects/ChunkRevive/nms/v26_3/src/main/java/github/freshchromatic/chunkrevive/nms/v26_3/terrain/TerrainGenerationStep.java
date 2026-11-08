@@ -17,25 +17,15 @@ import java.util.HashSet;
 import java.util.Set;
 
 final class TerrainGenerationStep {
+
     private TerrainGenerationStep() {
     }
 
-    static void generate(
-        ChunkGenerator generator,
-        ProtoChunk chunk,
-        WorldGenRegion region,
-        RandomState randomState,
-        Blender blender
-    ) {
-        generator.buildTerrain(
-            chunk,
-            blender,
-            randomState,
-            region.getLevel().structureManager().forWorldGenRegion(region),
-            region.getBiomeManager(),
-            region,
-            collectPossibleBiomes(region)
-        ).join();
+    static void generate(ChunkGenerator generator, ProtoChunk chunk, WorldGenRegion region, RandomState randomState,
+        Blender blender) {
+        generator.buildTerrain(chunk, blender, randomState, region.getLevel()
+            .structureManager()
+            .forWorldGenRegion(region), region.getBiomeManager(), region, collectPossibleBiomes(region)).join();
 
         BelowZeroRetrogen retrogen = chunk.getBelowZeroRetrogen();
         if (retrogen != null) {
@@ -45,12 +35,8 @@ final class TerrainGenerationStep {
             }
         }
 
-        Heightmap.primeHeightmaps(chunk, EnumSet.of(
-            Heightmap.Types.MOTION_BLOCKING,
-            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-            Heightmap.Types.OCEAN_FLOOR,
-            Heightmap.Types.WORLD_SURFACE
-        ));
+        Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.MOTION_BLOCKING,
+            Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, Heightmap.Types.OCEAN_FLOOR, Heightmap.Types.WORLD_SURFACE));
         chunk.setPersistedStatus(ChunkStatus.TERRAIN);
     }
 

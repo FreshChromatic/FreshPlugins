@@ -5,6 +5,7 @@ import org.bukkit.configuration.ConfigurationSection;
 
 @FunctionalInterface
 public interface ElementBuilder {
+
     /**
      * Builds a custom GUI element.
      *

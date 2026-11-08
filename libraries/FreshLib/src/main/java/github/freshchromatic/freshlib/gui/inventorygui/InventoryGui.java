@@ -36,20 +36,14 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockDispenseEvent;
-import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.DragType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryInteractEvent;
-import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
-import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -59,13 +53,11 @@ import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -75,8 +67,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.logging.Level;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -84,43 +74,62 @@ import java.util.stream.Collectors;
  */
 public class InventoryGui implements Listener {
 
-    private final static int[] ROW_WIDTHS = {3, 5, 9};
-    private final static InventoryType[] INVENTORY_TYPES = {
-            InventoryType.DISPENSER, // 3*3
-            InventoryType.HOPPER, // 5*1
-            InventoryType.CHEST // 9*x
+    private final static int[]           ROW_WIDTHS      = { 3, 5, 9 };
+    private final static InventoryType[] INVENTORY_TYPES = { InventoryType.DISPENSER,       // 3*3
+        InventoryType.HOPPER,                                                               // 5*1
+        InventoryType.CHEST                                                                 // 9*x
     };
 
-    private final static Map<String, InventoryGui> GUI_MAP = new ConcurrentHashMap<>();
-    private final static Map<UUID, ArrayDeque<InventoryGui>> GUI_HISTORY = new ConcurrentHashMap<>();
+    private static final GuiOwnerRegistry<InventoryGui> OWNER_REGISTRY = new GuiOwnerRegistry<>();
+    private static final GuiHistory<InventoryGui>       HISTORY        = new GuiHistory<>((player, gui) -> gui.show(
+        player, false));
 
-    private final static Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
+    private static final GuiPlaceholderReplacer PLACEHOLDER_REPLACER = new GuiPlaceholderReplacer();
 
     private final static boolean FOLIA;
 
     private static String DEFAULT_CLICK_SOUND;
 
-    private final Plugin plugin;
-    private final GuiListener listener;
-    private InventoryCreator creator;
-    private BiConsumer<ItemMeta, String> itemNameSetter;
+    private final Plugin                       plugin;
+    private final GuiListener                  listener;
+    private final GuiOwnerListener             ownerListener;
+    private final GuiOwnerActions              ownerActions  = new GuiOwnerActions() {
+
+                                                                 @Override
+                                                                 public InventoryHolder getOwner() {
+                                                                     return InventoryGui.this.getOwner();
+                                                                 }
+
+                                                                 @Override
+                                                                 public boolean hasRealOwner() {
+                                                                     return InventoryGui.this.hasRealOwner();
+                                                                 }
+
+                                                                 @Override
+                                                                 public void destroy() {
+                                                                     InventoryGui.this.destroy();
+                                                                 }
+                                                             };
+    private final GuiCloseDispatcher           closeDispatcher;
+    private InventoryCreator                   creator;
+    private BiConsumer<ItemMeta, String>       itemNameSetter;
     private BiConsumer<ItemMeta, List<String>> itemLoreSetter;
-    private String title;
-    private boolean titleUpdated = false;
-    private final char[] slots;
-    private int width;
-    private final GuiElement[] elementSlots;
-    private final Map<Character, GuiElement> elements = new ConcurrentHashMap<>();
-    private InventoryType inventoryType;
-    private final Map<UUID, Inventory> inventories = new ConcurrentHashMap<>();
-    private InventoryHolder owner;
-    private final Map<UUID, Integer> pageNumbers = new ConcurrentHashMap<>();
-    private final Map<UUID, Integer> pageAmounts = new ConcurrentHashMap<>();
-    private GuiElement.Action outsideAction = click -> false;
-    private CloseAction closeAction = close -> true;
-    private String clickSound = getDefaultClickSound();
-    private boolean silent = false;
-    
+    private String                             title;
+    private boolean                            titleUpdated  = false;
+    private final char[]                       slots;
+    private int                                width;
+    private final GuiElement[]                 elementSlots;
+    private final Map<Character, GuiElement>   elements      = new ConcurrentHashMap<>();
+    private InventoryType                      inventoryType;
+    private final GuiViewerRegistry            inventories   = new GuiViewerRegistry();
+    private InventoryHolder                    owner;
+    private final Map<UUID, Integer>           pageNumbers   = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer>           pageAmounts   = new ConcurrentHashMap<>();
+    private GuiElement.Action                  outsideAction = click -> false;
+    private CloseAction                        closeAction   = close -> true;
+    private String                             clickSound    = getDefaultClickSound();
+    private boolean                            silent        = false;
+
     static {
         boolean folia;
         try {
@@ -143,7 +152,8 @@ public class InventoryGui implements Listener {
                 // If it does use the sound key
                 clickSound = entry.getValue();
                 break;
-            } catch (IllegalArgumentException | IncompatibleClassChangeError ignored) {}
+            } catch (IllegalArgumentException | IncompatibleClassChangeError ignored) {
+            }
         }
         if (clickSound == null) {
             try {
@@ -155,7 +165,8 @@ public class InventoryGui implements Listener {
                         break;
                     }
                 }
-            } catch (InvocationTargetException | IllegalAccessException | NoSuchMethodException | IncompatibleClassChangeError ignored) {
+            } catch (InvocationTargetException | IllegalAccessException | NoSuchMethodException
+                | IncompatibleClassChangeError ignored) {
             }
         }
         if (clickSound == null) {
@@ -178,7 +189,9 @@ public class InventoryGui implements Listener {
      * @param elements          The {@link GuiElement}s that the gui should have. You can also use {@link #addElement(GuiElement)} later.
      * @throws IllegalArgumentException Thrown when the provided rows cannot be matched to an InventoryType
      */
-    public InventoryGui(Plugin plugin, InventoryCreator creator, BiConsumer<ItemMeta, String> itemNameSetter, BiConsumer<ItemMeta, List<String>> itemLoreSetter, InventoryHolder owner, String title, String[] rows, GuiElement... elements) {
+    public InventoryGui(Plugin plugin, InventoryCreator creator, BiConsumer<ItemMeta, String> itemNameSetter,
+        BiConsumer<ItemMeta, List<String>> itemLoreSetter, InventoryHolder owner, String title, String[] rows,
+        GuiElement... elements) {
         this.plugin = plugin;
         this.creator = creator;
         this.itemNameSetter = itemNameSetter;
@@ -186,6 +199,8 @@ public class InventoryGui implements Listener {
         this.owner = owner;
         this.title = title;
         this.listener = new GuiListener();
+        this.ownerListener = new GuiOwnerListener(plugin, ownerActions, () -> runTask(() -> draw(false)));
+        this.closeDispatcher = new GuiCloseDispatcher(this::runTaskOrNow);
 
         width = ROW_WIDTHS[0];
         for (String row : rows) {
@@ -241,7 +256,8 @@ public class InventoryGui implements Listener {
      * @param elements  The {@link GuiElement}s that the gui should have. You can also use {@link #addElement(GuiElement)} later.
      * @throws IllegalArgumentException Thrown when the provided rows cannot be matched to an InventoryType
      */
-    public InventoryGui(Plugin plugin, InventoryCreator creator, InventoryHolder owner, String title, String[] rows, GuiElement... elements) {
+    public InventoryGui(Plugin plugin, InventoryCreator creator, InventoryHolder owner, String title, String[] rows,
+        GuiElement... elements) {
         this(plugin, creator, ItemMeta::setDisplayName, ItemMeta::setLore, owner, title, rows, elements);
     }
 
@@ -257,10 +273,9 @@ public class InventoryGui implements Listener {
      * @throws IllegalArgumentException Thrown when the provided rows cannot be matched to an InventoryType
      */
     public InventoryGui(Plugin plugin, InventoryHolder owner, String title, String[] rows, GuiElement... elements) {
-        this(plugin, new InventoryCreator(
-                (gui, who, type) -> plugin.getServer().createInventory(new Holder(gui), type, resolveTitleComponent(gui, who)),
-                (gui, who, size) -> plugin.getServer().createInventory(new Holder(gui), size, resolveTitleComponent(gui, who))),
-                owner, title, rows, elements);
+        this(plugin, new InventoryCreator((gui, who, type) -> plugin.getServer().createInventory(new Holder(gui), type,
+            resolveTitleComponent(gui, who)), (gui, who, size) -> plugin.getServer().createInventory(new Holder(gui),
+                size, resolveTitleComponent(gui, who))), owner, title, rows, elements);
     }
 
     /**
@@ -301,7 +316,8 @@ public class InventoryGui implements Listener {
      * @param elements  The {@link GuiElement}s that the gui should have. You can also use {@link #addElement(GuiElement)} later.
      * @throws IllegalArgumentException Thrown when the provided rows cannot be matched to an InventoryType
      */
-    public InventoryGui(Plugin plugin, InventoryHolder owner, String title, String[] rows, Collection<GuiElement> elements) {
+    public InventoryGui(Plugin plugin, InventoryHolder owner, String title, String[] rows,
+        Collection<GuiElement> elements) {
         this(plugin, owner, title, rows);
         addElements(elements);
     }
@@ -314,12 +330,13 @@ public class InventoryGui implements Listener {
      */
     public void setElement(int slot, GuiElement element) {
         if (slot < 0 || slot >= elementSlots.length) {
-            throw new IllegalArgumentException("Provided slots is outside available slots! (" + elementSlots.length + ")");
+            throw new IllegalArgumentException("Provided slots is outside available slots! (" + elementSlots.length
+                + ")");
         }
         if (element.getSlots().length > 0 || element.getGui() != null) {
             throw new IllegalStateException("Element was already added to a gui!");
         }
-        element.setSlots(new int[] {slot});
+        element.setSlots(new int[] { slot });
         element.setGui(this);
         elementSlots[slot] = element;
     }
@@ -533,7 +550,7 @@ public class InventoryGui implements Listener {
      * @param pageNumber The page number to set
      */
     public void setPageNumber(int pageNumber) {
-        for (UUID playerId : inventories.keySet()) {
+        for (UUID playerId : inventories.viewerIds()) {
             Player player = plugin.getServer().getPlayer(playerId);
             if (player != null) {
                 setPageNumber(player, pageNumber);
@@ -606,13 +623,17 @@ public class InventoryGui implements Listener {
     public void show(HumanEntity player) {
         show(player, true);
     }
-    
+
     /**
      * Show this GUI to a player
      * @param player    The Player to show the GUI to
      * @param checkOpen Whether or not it should check if this gui is already open
      */
     public void show(HumanEntity player, boolean checkOpen) {
+        runTaskOrNow(player, () -> showOnViewerThread(player, checkOpen));
+    }
+
+    private void showOnViewerThread(HumanEntity player, boolean checkOpen) {
         // Draw the elements into an inventory, if the title was updated then also force-recreate the inventory if it exists
         draw(player, true, titleUpdated);
         if (titleUpdated || !checkOpen || !this.equals(getOpen(player))) {
@@ -653,8 +674,11 @@ public class InventoryGui implements Listener {
      * @param owner     The {@link InventoryHolder} that owns the gui
      */
     public void build(InventoryHolder owner) {
-        setOwner(owner);
-        listener.registerListeners();
+        synchronized (inventories) {
+            setOwner(owner);
+            listener.registerListeners();
+            ownerListener.register();
+        }
     }
 
     /**
@@ -669,7 +693,7 @@ public class InventoryGui implements Listener {
      * @param updateDynamic Update dynamic elements
      */
     public void draw(boolean updateDynamic) {
-        for (UUID playerId : inventories.keySet()) {
+        for (UUID playerId : inventories.viewerIds()) {
             Player player = plugin.getServer().getPlayer(playerId);
             if (player != null) {
                 runTaskOrNow(player, () -> draw(player, updateDynamic));
@@ -701,19 +725,34 @@ public class InventoryGui implements Listener {
      * @param recreateInventory Recreate the inventory
      */
     public void draw(HumanEntity who, boolean updateDynamic, boolean recreateInventory) {
+        if (who != null) {
+            runTaskOrNow(who, () -> drawOnViewerThread(who, updateDynamic, recreateInventory));
+            return;
+        }
+        drawOnViewerThread(null, updateDynamic, recreateInventory);
+    }
+
+    private void drawOnViewerThread(HumanEntity who, boolean updateDynamic, boolean recreateInventory) {
         if (updateDynamic) {
             updateElements(who, elements.values());
         }
         calculatePageAmount(who);
         Inventory inventory = getInventory(who);
         if (inventory == null || recreateInventory) {
-            build();
-            if (slots.length != inventoryType.getDefaultSize()) {
-                inventory = getInventoryCreator().getSizeCreator().create(this, who, slots.length);
-            } else {
-                inventory = getInventoryCreator().getTypeCreator().create(this, who, inventoryType);
+            synchronized (inventories) {
+                inventory = getInventory(who);
+                if (inventory == null || recreateInventory) {
+                    build();
+                    if (slots.length != inventoryType.getDefaultSize()) {
+                        inventory = getInventoryCreator().getSizeCreator().create(this, who, slots.length);
+                    } else {
+                        inventory = getInventoryCreator().getTypeCreator().create(this, who, inventoryType);
+                    }
+                    inventories.put(who != null ? who.getUniqueId() : null, inventory);
+                } else {
+                    inventory.clear();
+                }
             }
-            inventories.put(who != null ? who.getUniqueId() : null, inventory);
         } else {
             inventory.clear();
         }
@@ -796,14 +835,15 @@ public class InventoryGui implements Listener {
     public void close() {
         close(true);
     }
-    
+
     /**
      * Close the GUI for everyone viewing it
      * @param clearHistory  Whether to close the GUI completely (by clearing the history)
      */
     public void close(boolean clearHistory) {
-        for (Inventory inventory : inventories.values()) {
-            for (HumanEntity viewer : new ArrayList<>(inventory.getViewers())) {
+        for (UUID viewerId : inventories.viewerIds()) {
+            Player viewer = plugin.getServer().getPlayer(viewerId);
+            if (viewer != null) {
                 close(viewer, clearHistory);
             }
         }
@@ -826,7 +866,7 @@ public class InventoryGui implements Listener {
         if (clearHistory) {
             clearHistory(viewer);
         }
-        viewer.closeInventory();
+        closeDispatcher.close(viewer);
     }
 
     /**
@@ -837,17 +877,28 @@ public class InventoryGui implements Listener {
     }
 
     private void destroy(boolean closeInventories) {
-        if (closeInventories) {
-            close();
+        List<Map.Entry<UUID, Inventory>> inventoryEntries;
+        synchronized (inventories) {
+            inventoryEntries = inventories.clear();
+            pageNumbers.clear();
+            pageAmounts.clear();
+            listener.unregisterListeners();
+            ownerListener.unregister();
+            removeFromMap();
         }
-        for (Inventory inventory : inventories.values()) {
-            inventory.clear();
+        for (Map.Entry<UUID, Inventory> entry : inventoryEntries) {
+            Player viewer = plugin.getServer().getPlayer(entry.getKey());
+            if (viewer == null) {
+                entry.getValue().clear();
+                continue;
+            }
+            if (closeInventories) {
+                clearHistory(viewer);
+                closeDispatcher.closeAndClear(viewer, entry.getValue());
+            } else {
+                closeDispatcher.clear(viewer, entry.getValue());
+            }
         }
-        inventories.clear();
-        pageNumbers.clear();
-        pageAmounts.clear();
-        listener.unregisterListeners();
-        removeFromMap();
     }
 
     /**
@@ -856,21 +907,16 @@ public class InventoryGui implements Listener {
      * @param gui       The GUI to add to the history
      */
     public static void addHistory(HumanEntity player, InventoryGui gui) {
-        GUI_HISTORY.putIfAbsent(player.getUniqueId(), new ArrayDeque<>());
-        Deque<InventoryGui> history = getHistory(player);
-        if (history.peekLast() != gui) {
-            history.add(gui);
-        }
+        HISTORY.add(player, gui);
     }
 
     /**
      * Get the history of a player
      * @param player    The player to get the history for
-     * @return          The history as a deque of InventoryGuis;
-     *                  returns an empty one and not <code>null</code>!
+     * @return          A snapshot deque of InventoryGuis; returns an empty one and not <code>null</code>!
      */
     public static Deque<InventoryGui> getHistory(HumanEntity player) {
-        return GUI_HISTORY.getOrDefault(player.getUniqueId(), new ArrayDeque<>());
+        return HISTORY.get(player);
     }
 
     /**
@@ -879,16 +925,7 @@ public class InventoryGui implements Listener {
      * @return          <code>true</code> if there was a gui to show; <code>false</code> if not
      */
     public static boolean goBack(HumanEntity player) {
-        Deque<InventoryGui> history = getHistory(player);
-        history.pollLast();
-        if (history.isEmpty()) {
-            return false;
-        }
-        InventoryGui previous = history.peekLast();
-        if (previous != null) {
-            previous.show(player, false);
-        }
-        return true;
+        return HISTORY.goBack(player);
     }
 
     /**
@@ -897,8 +934,7 @@ public class InventoryGui implements Listener {
      * @return          The history
      */
     public static Deque<InventoryGui> clearHistory(HumanEntity player) {
-        Deque<InventoryGui> previous = GUI_HISTORY.remove(player.getUniqueId());
-        return previous != null ? previous : new ArrayDeque<>();
+        return HISTORY.clear(player);
     }
 
     /**
@@ -995,7 +1031,7 @@ public class InventoryGui implements Listener {
     public Collection<GuiElement> getElements() {
         return Collections.unmodifiableCollection(elements.values());
     }
-    
+
     /**
      * Set the owner of this GUI. Will remove the previous assignment.
      * @param owner The owner of the GUI
@@ -1003,11 +1039,7 @@ public class InventoryGui implements Listener {
     public void setOwner(InventoryHolder owner) {
         removeFromMap();
         this.owner = owner;
-        if (owner instanceof Entity) {
-            GUI_MAP.put(((Entity) owner).getUniqueId().toString(), this);
-        } else if (owner instanceof BlockState) {
-            GUI_MAP.put(((BlockState) owner).getLocation().toString(), this);
-        }
+        OWNER_REGISTRY.register(owner, this);
     }
 
     /**
@@ -1017,7 +1049,7 @@ public class InventoryGui implements Listener {
     public InventoryHolder getOwner() {
         return owner;
     }
-    
+
     /**
      * Check whether or not the Owner of this GUI is real or fake
      * @return <code>true</code> if the owner is a real world InventoryHolder; <code>false</code> if it is null
@@ -1025,7 +1057,7 @@ public class InventoryGui implements Listener {
     public boolean hasRealOwner() {
         return owner != null;
     }
-    
+
     /**
      * Get the Action that is run when clicked outside of the inventory
      * @return  The Action for when the player clicks outside the inventory; can be null
@@ -1033,7 +1065,7 @@ public class InventoryGui implements Listener {
     public GuiElement.Action getOutsideAction() {
         return outsideAction;
     }
-    
+
     /**
      * Set the Action that is run when clicked outside of the inventory
      * @param outsideAction The Action for when the player clicks outside the inventory; can be null
@@ -1041,7 +1073,7 @@ public class InventoryGui implements Listener {
     public void setOutsideAction(GuiElement.Action outsideAction) {
         this.outsideAction = outsideAction;
     }
-    
+
     /**
      * Get the action that is run when this GUI is closed
      * @return The action for when the player closes this inventory; can be null
@@ -1049,7 +1081,7 @@ public class InventoryGui implements Listener {
     public CloseAction getCloseAction() {
         return closeAction;
     }
-    
+
     /**
      * Set the action that is run when this GUI is closed; it should return true if the GUI should go back
      * @param closeAction The action for when the player closes this inventory; can be null
@@ -1107,13 +1139,9 @@ public class InventoryGui implements Listener {
     public void setSilent(boolean silent) {
         this.silent = silent;
     }
-    
+
     private void removeFromMap() {
-        if (owner instanceof Entity) {
-            GUI_MAP.remove(((Entity) owner).getUniqueId().toString(), this);
-        } else if (owner instanceof BlockState) {
-            GUI_MAP.remove(((BlockState) owner).getLocation().toString(), this);
-        }
+        OWNER_REGISTRY.unregister(owner, this);
     }
 
     /**
@@ -1122,12 +1150,7 @@ public class InventoryGui implements Listener {
      * @return          The InventoryGui registered to it or <code>null</code> if none was registered to it
      */
     public static InventoryGui get(InventoryHolder holder) {
-        if (holder instanceof Entity) {
-            return GUI_MAP.get(((Entity) holder).getUniqueId().toString());
-        } else if (holder instanceof BlockState) {
-            return GUI_MAP.get(((BlockState) holder).getLocation().toString());
-        }
-        return null;
+        return OWNER_REGISTRY.find(holder);
     }
 
     /**
@@ -1160,16 +1183,18 @@ public class InventoryGui implements Listener {
      * Play a click sound e.g. when an element acts as a button
      */
     public void playClickSound() {
-        if (isSilent() || clickSound == null) return;
-        for (Inventory inventory : inventories.values()) {
-            for (HumanEntity humanEntity : inventory.getViewers()) {
-                if (humanEntity instanceof Player) {
-                    ((Player) humanEntity).playSound(humanEntity.getEyeLocation(), getClickSound(), 1, 1);
-                }
+        if (isSilent() || clickSound == null) {
+            return;
+        }
+        String sound = getClickSound();
+        for (UUID viewerId : inventories.viewerIds()) {
+            Player viewer = plugin.getServer().getPlayer(viewerId);
+            if (viewer != null) {
+                runTaskOrNow(viewer, () -> viewer.playSound(viewer.getEyeLocation(), sound, 1, 1));
             }
         }
     }
-    
+
     /**
      * Get the inventory. Package scope as it should only be used by InventoryGui.Holder
      * @return The GUI's generated inventory
@@ -1184,7 +1209,10 @@ public class InventoryGui implements Listener {
      * @return The GUI's generated inventory, null if none was found
      */
     private Inventory getInventory(HumanEntity who) {
-        return who != null ? inventories.get(who.getUniqueId()) : (inventories.isEmpty() ? null : inventories.values().iterator().next());
+        if (who != null) {
+            return inventories.get(who.getUniqueId());
+        }
+        return inventories.isEmpty() ? null : inventories.values().getFirst();
     }
 
     /**
@@ -1203,18 +1231,22 @@ public class InventoryGui implements Listener {
      * @param cursor    The item on the cursor
      * @return The resulting click object
      */
-    private GuiElement.Click handleInteract(InventoryInteractEvent event, ClickType clickType, int slot, ItemStack cursor) {
-        GuiElement.Action action = null;
+    private GuiElement.Click handleInteract(InventoryInteractEvent event, ClickType clickType, int slot,
+        ItemStack cursor) {
         GuiElement element = null;
         try {
             if (slot >= 0) {
                 element = getElement(slot);
-                if (element != null) {
-                    action = element.getAction(event.getWhoClicked());
+            }
+            if (slot >= 0 || slot == -999) {
+                GuiElement.Click click = GuiClickDispatcher.dispatch(this, event, clickType, slot, cursor, element,
+                    outsideAction);
+                if (click != null) {
+                    redrawOtherViewers(event.getWhoClicked());
                 }
-            } else if (slot == -999) {
-                action = outsideAction;
-            } else {
+                return click;
+            }
+            if (slot < 0) {
                 if (event instanceof InventoryClickEvent) {
                     // Click was neither for the top inventory nor outside
                     // E.g. click is in the bottom inventory
@@ -1229,59 +1261,55 @@ public class InventoryGui implements Listener {
                 }
                 return null;
             }
-            GuiElement.Click click = new GuiElement.Click(this, slot, clickType, cursor, element, event);
-            if (action == null || action.onClick(click)) {
-                event.setCancelled(true);
-                if (event.getWhoClicked() instanceof Player) {
-                    ((Player) event.getWhoClicked()).updateInventory();
-                }
-            }
-            if (action != null) {
-                // Let's assume something changed and re-draw all currently shown inventories
-                for (UUID playerId : inventories.keySet()) {
-                    if (!event.getWhoClicked().getUniqueId().equals(playerId)) {
-                        Player player = plugin.getServer().getPlayer(playerId);
-                        if (player != null) {
-                            draw(player, false);
-                        }
-                    }
-                }
-                return click;
-            }
-        } catch (Throwable t) {
+            return null;
+        } catch (RuntimeException t) {
             event.setCancelled(true);
             if (event.getWhoClicked() instanceof Player) {
                 ((Player) event.getWhoClicked()).updateInventory();
             }
-            plugin.getLogger().log(Level.SEVERE, "Exception while trying to run action for click on "
-                    + (element != null ? element.getClass().getSimpleName() : "empty/unknown element")
-                    + " in slot " + slot + " of " + getTitle() + " GUI!", t);
+            plugin.getLogger().log(Level.SEVERE, "Exception while trying to run action for click on " + (element != null
+                ? element.getClass().getSimpleName()
+                : "empty/unknown element") + " in slot " + slot + " of " + getTitle() + " GUI!", t);
         }
         return null;
     }
 
+    private void redrawOtherViewers(HumanEntity actor) {
+        for (UUID playerId : inventories.viewerIds()) {
+            if (!actor.getUniqueId().equals(playerId)) {
+                Player player = plugin.getServer().getPlayer(playerId);
+                if (player != null) {
+                    draw(player, false);
+                }
+            }
+        }
+    }
+
     private abstract class UnregisterableListener implements Listener {
+
         private final List<UnregisterableListener> listeners;
-        private boolean listenersRegistered = false;
+        private boolean                            listenersRegistered = false;
 
         private UnregisterableListener() {
             List<UnregisterableListener> listeners = new ArrayList<>();
             for (Class<?> innerClass : getClass().getDeclaredClasses()) {
                 if (UnregisterableListener.class.isAssignableFrom(innerClass)) {
                     try {
-                        UnregisterableListener listener = ((Class<? extends UnregisterableListener>) innerClass).getDeclaredConstructor(getClass()).newInstance(this);
+                        UnregisterableListener listener = ((Class<? extends UnregisterableListener>) innerClass).getDeclaredConstructor(
+                            getClass()).newInstance(this);
                         if (!(listener instanceof OptionalListener) || ((OptionalListener) listener).isCompatible()) {
                             listeners.add(listener);
                         }
-                    } catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-                        e.printStackTrace();
+                    } catch (InstantiationException | IllegalAccessException | InvocationTargetException
+                        | NoSuchMethodException e) {
+                        throw new IllegalStateException("Could not initialize GUI listener " + innerClass.getName(), e);
                     }
                 }
             }
             this.listeners = Collections.unmodifiableList(listeners);
         }
 
-        protected void registerListeners() {
+        protected synchronized void registerListeners() {
             if (listenersRegistered) {
                 return;
             }
@@ -1292,7 +1320,7 @@ public class InventoryGui implements Listener {
             listenersRegistered = true;
         }
 
-        protected void unregisterListeners() {
+        protected synchronized void unregisterListeners() {
             HandlerList.unregisterAll(this);
             for (UnregisterableListener listener : listeners) {
                 listener.unregisterListeners();
@@ -1302,6 +1330,7 @@ public class InventoryGui implements Listener {
     }
 
     private abstract class OptionalListener extends UnregisterableListener {
+
         private boolean isCompatible() {
             try {
                 getClass().getMethods();
@@ -1318,6 +1347,9 @@ public class InventoryGui implements Listener {
      */
     private class GuiListener extends UnregisterableListener {
 
+        private final GuiDragDispatcher dragDispatcher = new GuiDragDispatcher(InventoryGui.this::getElement,
+            InventoryGui.this::handleInteract, InventoryGui.this::runTask);
+
         @EventHandler(priority = EventPriority.HIGHEST)
         private void onInventoryClick(InventoryClickEvent event) {
             if (event.getInventory().equals(getInventory(event.getWhoClicked()))) {
@@ -1326,7 +1358,7 @@ public class InventoryGui implements Listener {
                 int size;
                 try {
                     size = GuiView.of(event.getView()).getTopInventory().getSize();
-                } catch (Throwable t) {
+                } catch (RuntimeException | AssertionError | LinkageError t) {
                     event.setCancelled(true);
                     return;
                 }
@@ -1357,79 +1389,7 @@ public class InventoryGui implements Listener {
         public void onInventoryDrag(InventoryDragEvent event) {
             Inventory inventory = getInventory(event.getWhoClicked());
             if (event.getInventory().equals(inventory)) {
-                // Check if we only drag over one slot if so then handle that as a click with the element
-                if (event.getRawSlots().size() == 1) {
-                    int slot = event.getRawSlots().iterator().next();
-                    int size;
-                    try {
-                        size = GuiView.of(event.getView()).getTopInventory().getSize();
-                    } catch (Throwable t) {
-                        event.setCancelled(true);
-                        return;
-                    }
-                    if (slot < size) {
-                        GuiElement.Click click = handleInteract(
-                                event,
-                                // Map drag type to the button that caused it
-                                event.getType() == DragType.SINGLE ? ClickType.RIGHT : ClickType.LEFT,
-                                slot,
-                                event.getOldCursor()
-                        );
-
-                        // Update the cursor if necessary
-                        if (click != null && !event.getOldCursor().equals(click.getCursor())) {
-                            event.setCursor(click.getCursor());
-                        }
-                    }
-                    return;
-                }
-
-                int rest = 0;
-                Map<Integer, ItemStack> resetSlots = new HashMap<>();
-                for (Map.Entry<Integer, ItemStack> items : event.getNewItems().entrySet()) {
-                    if (items.getKey() < inventory.getSize()) {
-                        GuiElement element = getElement(items.getKey());
-                        if (!(element instanceof GuiStorageElement)
-                                || !((GuiStorageElement) element).setStorageItem(event.getWhoClicked(), items.getKey(), items.getValue())) {
-                            ItemStack slotItem = event.getInventory().getItem(items.getKey());
-                            if (!items.getValue().isSimilar(slotItem)) {
-                                rest += items.getValue().getAmount();
-                            } else if (slotItem != null) {
-                                rest += items.getValue().getAmount() - slotItem.getAmount();
-                            }
-                            //items.getValue().setAmount(0); // can't change resulting items :/
-                            resetSlots.put(items.getKey(), event.getInventory().getItem(items.getKey())); // reset them manually
-                        }
-                    }
-                }
-                
-                runTask(event.getWhoClicked(), () -> {
-                    for (Map.Entry<Integer, ItemStack> items : resetSlots.entrySet()) {
-                        GuiView.of(event.getView()).getTopInventory().setItem(items.getKey(), items.getValue());
-                    }
-                });
-                
-                if (rest > 0) {
-                    int cursorAmount = event.getCursor() != null ? event.getCursor().getAmount() : 0;
-                    if (!event.getOldCursor().isSimilar(event.getCursor())) {
-                        event.setCursor(event.getOldCursor());
-                        cursorAmount = 0;
-                    }
-                    int newCursorAmount = cursorAmount + rest;
-                    if (newCursorAmount <= event.getCursor().getMaxStackSize()) {
-                        event.getCursor().setAmount(newCursorAmount);
-                    } else {
-                        event.getCursor().setAmount(event.getCursor().getMaxStackSize());
-                        ItemStack add = event.getCursor().clone();
-                        int addAmount = newCursorAmount - event.getCursor().getMaxStackSize();
-                        if (addAmount > 0) {
-                            add.setAmount(addAmount);
-                            for (ItemStack drop : event.getWhoClicked().getInventory().addItem(add).values()) {
-                                event.getWhoClicked().getLocation().getWorld().dropItem(event.getWhoClicked().getLocation(), drop);
-                            }
-                        }
-                    }
-                }
+                dragDispatcher.dispatch(event, inventory);
             }
         }
 
@@ -1437,67 +1397,44 @@ public class InventoryGui implements Listener {
         public void onInventoryClose(InventoryCloseEvent event) {
             Inventory inventory = getInventory(event.getPlayer());
             if (event.getInventory().equals(inventory)) {
-                // go back. that checks if the player is in gui and has history
-                if (InventoryGui.this.equals(getOpen(event.getPlayer()))) {
-                    if (closeAction == null || closeAction.onClose(new Close(event.getPlayer(), InventoryGui.this, event))) {
-                        goBack(event.getPlayer());
-                    } else {
-                        clearHistory(event.getPlayer());
+                closeDispatcher.handleCloseEvent(() -> {
+                    if (InventoryGui.this.equals(getOpen(event.getPlayer()))) {
+                        boolean returnToPrevious = closeAction == null || closeAction.onClose(new Close(
+                            event.getPlayer(), InventoryGui.this, event));
+                        HISTORY.handleClose(event.getPlayer(), returnToPrevious);
                     }
+                }, () -> HISTORY.clear(event.getPlayer()), () -> removeClosedInventory(event, inventory));
+            }
+        }
+
+        private void removeClosedInventory(InventoryCloseEvent event, Inventory inventory) {
+            GuiViewerRegistry.Removal removal;
+            synchronized (inventories) {
+                removal = inventories.remove(event.getPlayer().getUniqueId(), inventory);
+                if (removal == GuiViewerRegistry.Removal.NOT_REGISTERED) {
+                    return;
                 }
-                if (inventories.size() <= 1) {
+                pageAmounts.remove(event.getPlayer().getUniqueId());
+                pageNumbers.remove(event.getPlayer().getUniqueId());
+                if (removal == GuiViewerRegistry.Removal.LAST_VIEWER) {
                     destroy(false);
-                } else {
-                    inventory.clear();
-                    for (HumanEntity viewer : new ArrayList<>(inventory.getViewers())) {
-                        if (viewer != event.getPlayer()) {
-                            viewer.closeInventory();
-                        }
-                    }
-                    inventories.remove(event.getPlayer().getUniqueId());
-                    pageAmounts.remove(event.getPlayer().getUniqueId());
-                    pageNumbers.remove(event.getPlayer().getUniqueId());
-                    for (GuiElement element : getElements()) {
-                        if (element instanceof DynamicGuiElement) {
-                            ((DynamicGuiElement) element).removeCachedElement(event.getPlayer());
+                }
+            }
+            inventory.clear();
+            if (removal == GuiViewerRegistry.Removal.REMAINING_VIEWERS) {
+                for (UUID viewerId : inventories.viewerIds()) {
+                    if (!viewerId.equals(event.getPlayer().getUniqueId())) {
+                        Player viewer = plugin.getServer().getPlayer(viewerId);
+                        if (viewer != null) {
+                            closeDispatcher.close(viewer);
                         }
                     }
                 }
-            }
-        }
-
-        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-        public void onInventoryMoveItem(InventoryMoveItemEvent event) {
-            if (hasRealOwner() && (owner.equals(event.getDestination().getHolder()) || owner.equals(event.getSource().getHolder()))) {
-                runTask(() -> InventoryGui.this.draw(false));
-            }
-        }
-
-        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-        public void onDispense(BlockDispenseEvent event) {
-            if (hasRealOwner() && owner.equals(event.getBlock().getState())) {
-                runTask(() -> InventoryGui.this.draw(false));
-            }
-        }
-
-        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-        public void onBlockBreak(BlockBreakEvent event) {
-            if (hasRealOwner() && owner.equals(event.getBlock().getState())) {
-                destroy();
-            }
-        }
-
-        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-        public void onEntityDeath(EntityDeathEvent event) {
-            if (hasRealOwner() && owner.equals(event.getEntity())) {
-                destroy();
-            }
-        }
-
-        @EventHandler(priority = EventPriority.MONITOR)
-        public void onPluginDisable(PluginDisableEvent event) {
-            if (event.getPlugin() == plugin) {
-                destroy();
+                for (GuiElement element : getElements()) {
+                    if (element instanceof DynamicGuiElement) {
+                        ((DynamicGuiElement) element).removeCachedElement(event.getPlayer());
+                    }
+                }
             }
         }
 
@@ -1513,28 +1450,29 @@ public class InventoryGui implements Listener {
                     if (GuiView.of(event.getPlayer().getOpenInventory()).getTopInventory().equals(inventory)) {
                         event.setCancelled(true);
                     }
-                } catch (Throwable t) {
+                } catch (RuntimeException | AssertionError | LinkageError t) {
                     event.setCancelled(true);
                 }
             }
         }
     }
-    
+
     /**
      * Fake InventoryHolder for the GUIs
      */
     public static class Holder implements InventoryHolder {
+
         private InventoryGui gui;
-    
+
         public Holder(InventoryGui gui) {
             this.gui = gui;
         }
-        
+
         @Override
         public Inventory getInventory() {
             return gui.getInventory();
         }
-        
+
         public InventoryGui getGui() {
             return gui;
         }
@@ -1546,40 +1484,41 @@ public class InventoryGui implements Listener {
      * The method should return whether the close should go back or not.
      */
     public static interface CloseAction {
-        
+
         /**
          * Executed when a player closes a GUI inventory
          * @param close The close object holding information about this close
          * @return Whether or not the close should go back or not
          */
         boolean onClose(Close close);
-        
+
     }
-    
+
     public static class Close {
-        private final HumanEntity player;
-        private final InventoryGui gui;
+
+        private final HumanEntity         player;
+        private final InventoryGui        gui;
         private final InventoryCloseEvent event;
-    
+
         public Close(HumanEntity player, InventoryGui gui, InventoryCloseEvent event) {
             this.player = player;
             this.gui = gui;
             this.event = event;
         }
-    
+
         public HumanEntity getPlayer() {
             return player;
         }
-    
+
         public InventoryGui getGui() {
             return gui;
         }
-    
+
         public InventoryCloseEvent getEvent() {
             return event;
         }
     }
-    
+
     /**
      * Set the text of an item using the display name and the lore.
      * Also replaces any placeholders in the text and filters out empty lines.
@@ -1606,9 +1545,9 @@ public class InventoryGui implements Listener {
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
                 String combined = replaceVars(player, Arrays.stream(text)
-                        .map(s -> s == null ? " " : s)
-                        .filter(s -> !s.isEmpty())
-                        .collect(Collectors.joining("\n")));
+                    .map(s -> s == null ? " " : s)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.joining("\n")));
                 String[] lines = combined.split("\n");
                 if (text[0] != null) {
                     getItemNameSetter().accept(meta, lines[0]);
@@ -1652,34 +1591,14 @@ public class InventoryGui implements Listener {
         }
         map.putIfAbsent("title", title);
         map.putIfAbsent("page", String.valueOf(getPageNumber(player) + 1));
-        map.putIfAbsent("nextpage", getPageNumber(player) + 1 < getPageAmount(player) ? String.valueOf(getPageNumber(player) + 2) : "none");
+        map.putIfAbsent("nextpage", getPageNumber(player) + 1 < getPageAmount(player) ? String.valueOf(getPageNumber(
+            player) + 2) : "none");
         map.putIfAbsent("prevpage", getPageNumber(player) > 0 ? String.valueOf(getPageNumber(player)) : "none");
         map.putIfAbsent("pages", String.valueOf(getPageAmount(player)));
 
-        return ChatColor.translateAlternateColorCodes('&', replace(text, map));
+        return ChatColor.translateAlternateColorCodes('&', PLACEHOLDER_REPLACER.replace(text, map));
     }
 
-    /**
-     * Replace placeholders in a string
-     * @param string        The string to replace in
-     * @param replacements  What to replace the placeholders with. The n-th index is the placeholder, the n+1-th the value.
-     * @return The string with all placeholders replaced (using the configured placeholder prefix and suffix)
-     */
-    private String replace(String string, Map<String, String> replacements) {
-        for (Map.Entry<String, String> entry : replacements.entrySet()) {
-            if (entry.getKey() == null) {
-                continue;
-            }
-            String placeholder = "%" + entry.getKey() + "%";
-            Pattern pattern = PATTERN_CACHE.get(placeholder);
-            if (pattern == null) {
-                PATTERN_CACHE.put(placeholder, pattern = Pattern.compile(placeholder, Pattern.LITERAL));
-            }
-            string = pattern.matcher(string).replaceAll(Matcher.quoteReplacement(entry.getValue() != null ? entry.getValue() : "null"));
-        }
-        return string;
-    }
-    
     /**
      * Simulate the collecting to the cursor while respecting elements that can't be modified
      * @param click The click that startet it all
@@ -1719,14 +1638,14 @@ public class InventoryGui implements Listener {
                 }
             }
         }
-    
+
         if (itemInGui) {
             event.setCurrentItem(null);
             event.setCancelled(true);
             if (click.getWhoClicked() instanceof Player) {
                 ((Player) click.getWhoClicked()).updateInventory();
             }
-    
+
             if (newCursor.getAmount() < newCursor.getMaxStackSize()) {
                 Inventory bottomInventory = GuiView.of(event.getView()).getBottomInventory();
                 for (int i = 0; i < bottomInventory.getContents().length; i++) {
@@ -1746,7 +1665,7 @@ public class InventoryGui implements Listener {
             draw(false);
         }
     }
-    
+
     /**
      * Add items to a stack up to the max stack size
      * @param item  The base item
@@ -1770,8 +1689,9 @@ public class InventoryGui implements Listener {
     }
 
     public static class InventoryCreator {
+
         private final CreatorImplementation<InventoryType> typeCreator;
-        private final CreatorImplementation<Integer> sizeCreator;
+        private final CreatorImplementation<Integer>       sizeCreator;
 
         /**
          * A new inventory creator which should be able to create an inventory based on the type and the size.
@@ -1784,7 +1704,8 @@ public class InventoryGui implements Listener {
          * @param typeCreator The type creator.
          * @param sizeCreator The size creator
          */
-        public InventoryCreator(CreatorImplementation<InventoryType> typeCreator, CreatorImplementation<Integer> sizeCreator) {
+        public InventoryCreator(CreatorImplementation<InventoryType> typeCreator,
+            CreatorImplementation<Integer> sizeCreator) {
             this.typeCreator = typeCreator;
             this.sizeCreator = sizeCreator;
         }
@@ -1798,6 +1719,7 @@ public class InventoryGui implements Listener {
         }
 
         public interface CreatorImplementation<T> {
+
             /**
              * Creates a new inventory
              * @param gui   The InventoryGui instance

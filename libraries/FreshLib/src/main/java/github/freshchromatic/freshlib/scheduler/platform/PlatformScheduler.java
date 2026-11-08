@@ -71,7 +71,8 @@ public interface PlatformScheduler {
 
     PlatformScheduledTask<?> runTaskLater(Plugin plugin, Runnable task, Runnable retired, long delay, Entity entity);
 
-    PlatformScheduledTask<?> runTaskTimer(Plugin plugin, Runnable task, Runnable retired, long delay, long period, Entity entity);
+    PlatformScheduledTask<?> runTaskTimer(Plugin plugin, Runnable task, Runnable retired, long delay, long period,
+        Entity entity);
 
     PlatformScheduledTask<?> runTask(Plugin plugin, Runnable task, Location location);
 
@@ -87,9 +88,11 @@ public interface PlatformScheduler {
 
     PlatformScheduledTask<?> runTask(Plugin plugin, Runnable task, World world, int chunkX, int chunkZ);
 
-    PlatformScheduledTask<?> runTaskLater(Plugin plugin, Runnable task, long delay, World world, int chunkX, int chunkZ);
+    PlatformScheduledTask<?> runTaskLater(Plugin plugin, Runnable task, long delay, World world, int chunkX,
+        int chunkZ);
 
-    PlatformScheduledTask<?> runTaskTimer(Plugin plugin, Runnable task, long delay, long period, World world, int chunkX, int chunkZ);
+    PlatformScheduledTask<?> runTaskTimer(Plugin plugin, Runnable task, long delay, long period, World world,
+        int chunkX, int chunkZ);
 
     PlatformScheduledTask<?> runTask(Plugin plugin, Runnable task);
 
@@ -116,5 +119,5 @@ public interface PlatformScheduler {
     <T> Future<T> callSyncMethod(Plugin plugin, Callable<T> task);
 
     boolean teleport(Entity entity, Location location);
-    
+
 }

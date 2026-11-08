@@ -4,6 +4,7 @@ import me.tayebyassine.homestead.managers.ChunkManager;
 import org.bukkit.World;
 
 final class HomesteadProtection extends ExternalProtection {
+
     HomesteadProtection() {
         super("Homestead");
     }

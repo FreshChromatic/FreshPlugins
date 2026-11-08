@@ -10,10 +10,15 @@ import java.util.Set;
 
 /** Version-neutral facade for procedural biome matching. */
 public final class BiomeMatcher {
+
     private final BiomeSampler sampler;
 
     public BiomeMatcher(World world, HeightmapKind heightmap) {
-        this.sampler = NmsPlatformLoader.load().worldScan().biomeSampler(world, heightmap);
+        this(NmsPlatformLoader.load().worldScan().biomeSampler(world, heightmap));
+    }
+
+    BiomeMatcher(BiomeSampler sampler) {
+        this.sampler = sampler;
     }
 
     public boolean matches(int chunkX, int chunkZ, Set<String> targets, BiomeMatchMode mode) {

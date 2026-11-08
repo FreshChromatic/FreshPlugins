@@ -57,8 +57,12 @@ public class DurationSerializer implements TypeSerializer<Duration> {
                 if (numBuffer.length() > 0) {
                     double num = Double.parseDouble(numBuffer.toString());
                     switch (Character.toLowerCase(c)) {
-                        case 'd': totalMillis += (long) (num * 86400000); break;
-                        case 'h': totalMillis += (long) (num * 3600000); break;
+                        case 'd':
+                            totalMillis += (long) (num * 86400000);
+                            break;
+                        case 'h':
+                            totalMillis += (long) (num * 3600000);
+                            break;
                         case 'm':
                             if (i + 1 < input.length() && Character.toLowerCase(input.charAt(i + 1)) == 's') {
                                 totalMillis += (long) num;
@@ -67,8 +71,11 @@ public class DurationSerializer implements TypeSerializer<Duration> {
                                 totalMillis += (long) (num * 60000);
                             }
                             break;
-                        case 's': totalMillis += (long) (num * 1000); break;
-                        default: throw new IllegalArgumentException("Unknown duration unit: " + c);
+                        case 's':
+                            totalMillis += (long) (num * 1000);
+                            break;
+                        default:
+                            throw new IllegalArgumentException("Unknown duration unit: " + c);
                     }
                     numBuffer = new StringBuilder();
                 }

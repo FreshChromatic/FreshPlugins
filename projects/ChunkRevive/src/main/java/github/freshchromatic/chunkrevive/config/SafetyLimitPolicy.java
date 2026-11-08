@@ -4,7 +4,9 @@ import java.util.Locale;
 
 /** Parses memory-safety limit values while retaining compatibility with legacy numeric YAML values. */
 public final class SafetyLimitPolicy {
-    private SafetyLimitPolicy() {}
+
+    private SafetyLimitPolicy() {
+    }
 
     /** Returns {@link Integer#MAX_VALUE} when the safety layer should not add a cap. */
     public static int resolveCap(String raw, int automaticValue) {

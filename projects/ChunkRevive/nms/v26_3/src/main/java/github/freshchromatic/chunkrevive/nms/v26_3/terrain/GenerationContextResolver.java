@@ -6,6 +6,10 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import org.bukkit.craftbukkit.generator.CustomChunkGenerator;
 
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * Resolves the server-owned generation context needed to query terrain/biomes without materializing chunks.
  *
@@ -13,7 +17,9 @@ import org.bukkit.craftbukkit.generator.CustomChunkGenerator;
  * generator, biome source and cached random state.
  */
 public final class GenerationContextResolver {
-    private GenerationContextResolver() {}
+
+    private GenerationContextResolver() {
+    }
 
     public static GenerationContext resolve(ServerLevel nmsLevel, long seed) {
         var chunkSource = nmsLevel.getChunkSource();
@@ -21,27 +27,30 @@ public final class GenerationContextResolver {
         ChunkGenerator terrainGenerator = unwrapCraftEngineLayers(activeGenerator);
         NoiseBasedChunkGenerator noiseGenerator = unwrapNoiseGenerator(terrainGenerator);
         if (noiseGenerator == null) {
-            throw new IllegalStateException(
-                "ChunkRevive cannot safely regenerate world '" + nmsLevel.getWorld().getName()
-                    + "': unsupported chunk generator " + activeGenerator.getClass().getName());
+            throw new IllegalStateException("ChunkRevive cannot safely regenerate world '"
+                + nmsLevel.getWorld().getName() + "': unsupported chunk generator "
+                + activeGenerator.getClass().getName());
         }
 
         // The seed supplied by callers is the world's own seed. Reusing these objects is both faster
         // and more correct than rebuilding vanilla defaults: Paper already constructed them with the
         // world's datapacks, biome provider, Spigot structure salts and custom-generator wrapper.
         if (seed != nmsLevel.getSeed()) {
-            throw new IllegalArgumentException(
-                "ChunkRevive regeneration seed does not match world seed for '" + nmsLevel.getWorld().getName() + "'");
+            throw new IllegalArgumentException("ChunkRevive regeneration seed does not match world seed for '"
+                + nmsLevel.getWorld().getName() + "'");
         }
         BiomeSource biomeSource = activeGenerator.getBiomeSource();
-        return new GenerationContext(activeGenerator, terrainGenerator, noiseGenerator, chunkSource.randomState(), biomeSource);
+        return new GenerationContext(activeGenerator, terrainGenerator, noiseGenerator, chunkSource.randomState(),
+            biomeSource);
     }
 
     private static ChunkGenerator unwrapCraftEngineLayers(ChunkGenerator generator) {
         ChunkGenerator current = generator;
         for (int depth = 0; depth < 4; depth++) {
             ChunkGenerator delegate = unwrapCraftEngineGenerator(current);
-            if (delegate == null) return current;
+            if (delegate == null) {
+                return current;
+            }
             current = delegate;
         }
         return current;
@@ -53,7 +62,9 @@ public final class GenerationContextResolver {
         // Keep the wrapper as the active pipeline generator, but expose its vanilla delegate for
         // the private synchronous noise methods used by the vanilla-only fast path.
         for (int depth = 0; depth < 4; depth++) {
-            if (current instanceof NoiseBasedChunkGenerator noise) return noise;
+            if (current instanceof NoiseBasedChunkGenerator noise) {
+                return noise;
+            }
             if (current instanceof CustomChunkGenerator custom) {
                 current = custom.getDelegate();
                 continue;
@@ -74,22 +85,24 @@ public final class GenerationContextResolver {
     private static ChunkGenerator unwrapCraftEngineGenerator(ChunkGenerator generator) {
         Class<?> type = generator.getClass();
         String name = type.getName();
-        if (!name.startsWith("net.momirealms.craftengine.bukkit.nms.")
-            || !name.endsWith(".worldgen.InjectedCustomChunkGenerator")) {
+        if (!name.startsWith("net.momirealms.craftengine.bukkit.nms.") || !name.endsWith(
+            ".worldgen.InjectedCustomChunkGenerator")) {
             return null;
         }
 
         try {
-            java.lang.reflect.Field delegateField;
+            Field delegateField;
             try {
                 delegateField = type.getDeclaredField("target");
             } catch (NoSuchFieldException missingNamedField) {
                 // Be tolerant of a future field rename, but only when the known CraftEngine wrapper
                 // still has exactly one field capable of holding a ChunkGenerator.
-                java.util.List<java.lang.reflect.Field> candidates = java.util.Arrays.stream(type.getDeclaredFields())
+                List<Field> candidates = Arrays.stream(type.getDeclaredFields())
                     .filter(field -> ChunkGenerator.class.isAssignableFrom(field.getType()))
                     .toList();
-                if (candidates.size() != 1) return null;
+                if (candidates.size() != 1) {
+                    return null;
+                }
                 delegateField = candidates.getFirst();
             }
             delegateField.setAccessible(true);

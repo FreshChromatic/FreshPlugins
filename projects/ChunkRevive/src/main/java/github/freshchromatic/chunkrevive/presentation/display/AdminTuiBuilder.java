@@ -14,21 +14,19 @@ public final class AdminTuiBuilder {
     public static final TextColor SEVERE    = TextColor.fromHexString("#FF6048");
     public static final TextColor NORMAL    = TextColor.fromHexString("#8BFF7B");
 
-    private static final Component DIVIDER =
-        Component.text("                                        ")
-            .color(PRIMARY)
-            .decorate(TextDecoration.STRIKETHROUGH);
+    private static final Component DIVIDER = Component.text("                                        ")
+        .color(PRIMARY)
+        .decorate(TextDecoration.STRIKETHROUGH);
 
     private static final Component LINE_PREFIX   = Component.text("⌗ ").color(PRIMARY);
     private static final Component ACTION_PREFIX = Component.text("▸ ").color(PRIMARY);
     private static final Component ROW_SEP       = Component.text(" - ").color(SECONDARY);
 
-    private AdminTuiBuilder() {}
+    private AdminTuiBuilder() {
+    }
 
     public static Component header(Component title) {
-        return Component.text("__/ ").color(PRIMARY)
-            .append(title)
-            .append(Component.text(" \\__").color(PRIMARY));
+        return Component.text("__/ ").color(PRIMARY).append(title).append(Component.text(" \\__").color(PRIMARY));
     }
 
     public static Component divider() {
@@ -46,7 +44,9 @@ public final class AdminTuiBuilder {
     public static Component row(Component... parts) {
         Component result = Component.empty();
         for (int i = 0; i < parts.length; i++) {
-            if (i > 0) result = result.append(ROW_SEP);
+            if (i > 0) {
+                result = result.append(ROW_SEP);
+            }
             result = result.append(parts[i]);
         }
         return result;
@@ -65,14 +65,12 @@ public final class AdminTuiBuilder {
     }
 
     public static Component disabledButton(Component label) {
-        return Component.empty().color(SECONDARY)
-            .append(Component.text("["))
-            .append(label)
-            .append(Component.text("]"));
+        return Component.empty().color(SECONDARY).append(Component.text("[")).append(label).append(Component.text("]"));
     }
 
     private static Component button(TextColor color, Component label, ClickEvent click, Component hover) {
-        return Component.empty().color(color)
+        return Component.empty()
+            .color(color)
             .append(Component.text("["))
             .append(label)
             .append(Component.text("]"))

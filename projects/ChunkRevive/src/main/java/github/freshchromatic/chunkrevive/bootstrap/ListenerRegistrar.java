@@ -17,27 +17,19 @@ import java.util.function.Supplier;
 
 /** Single registration point for core and optional-integration listeners. */
 public final class ListenerRegistrar {
-    private ListenerRegistrar() {}
 
-    public static void register(
-            Plugin plugin,
-            MarkService markService,
-            StructureService structureService,
-            ChunkDisplayService displayService,
-            Supplier<Messages> messages,
-            Supplier<PluginConfig> config,
-            ProtectionIntegration protectionIntegration) {
-        var markingListener =
-            new PlayerMarkingListener(markService, messages, config, structureService, plugin);
+    private ListenerRegistrar() {
+    }
+
+    public static void register(Plugin plugin, MarkService markService, StructureService structureService,
+        ChunkDisplayService displayService, Supplier<Messages> messages, Supplier<PluginConfig> config,
+        ProtectionIntegration protectionIntegration) {
+        var markingListener = new PlayerMarkingListener(markService, messages, config, structureService, plugin);
         Bukkit.getPluginManager().registerEvents(markingListener, plugin);
-        Bukkit.getOnlinePlayers().forEach(player ->
-            Scheduler.runTask(plugin,
-                () -> markingListener.detectStructuresAtCurrentLocation(player), player));
-        Bukkit.getPluginManager().registerEvents(
-            new PlayerVisibilityListener(displayService),
-            plugin);
-        Bukkit.getPluginManager().registerEvents(
-            new PlayerLifecycleListener(plugin, markService, displayService),
+        Bukkit.getOnlinePlayers().forEach(player -> Scheduler.runTask(plugin,
+            () -> markingListener.detectStructuresAtCurrentLocation(player), player));
+        Bukkit.getPluginManager().registerEvents(new PlayerVisibilityListener(displayService), plugin);
+        Bukkit.getPluginManager().registerEvents(new PlayerLifecycleListener(plugin, markService, displayService),
             plugin);
         protectionIntegration.registerListeners(plugin, markService);
     }

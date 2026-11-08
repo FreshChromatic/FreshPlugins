@@ -2,12 +2,19 @@ package github.freshchromatic.freshlib.util;
 
 import org.bukkit.plugin.Plugin;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Locale;
 
 public class FileUtils {
 
@@ -48,8 +55,9 @@ public class FileUtils {
         if (files == null) {
             return null;
         }
+        String normalizedName = name.toLowerCase(Locale.ROOT);
         for (File file : files) {
-            if (file.getName().toLowerCase().contains(name.toLowerCase())) {
+            if (file.getName().toLowerCase(Locale.ROOT).contains(normalizedName)) {
                 return file;
             }
         }
@@ -57,54 +65,67 @@ public class FileUtils {
     }
 
     public String readResource(String name) {
+        if (name == null) {
+            return null;
+        }
         URL url = getClass().getClassLoader().getResource(name);
         if (url == null) {
             return null;
         }
-        URLConnection connection = null;
         try {
-            connection = url.openConnection();
+            URLConnection connection = url.openConnection();
+            connection.setUseCaches(false);
+            try (InputStream inputStream = connection.getInputStream()) {
+                return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            }
         } catch (IOException e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not read bundled resource " + name + ": " + e.getMessage(), e);
+            return null;
         }
-        connection.setUseCaches(false);
-        try (InputStream inputStream = connection.getInputStream()) {
-            byte[] file_raw = new byte[inputStream.available()];
-            inputStream.read(file_raw);
-            inputStream.close();
-            return new String(file_raw, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return null;
     }
 
     public void saveFile(Plugin plugin, String name) {
+        Path dataDirectory = plugin.getDataFolder().toPath().toAbsolutePath().normalize();
+        Path target = dataDirectory.resolve(name).normalize();
+        if (target.equals(dataDirectory) || !target.startsWith(dataDirectory)) {
+            throw new IllegalArgumentException("Resource destination must be inside the plugin data directory");
+        }
+
         URL url = getClass().getClassLoader().getResource(name);
         if (url == null) {
             return;
         }
-        File file = new File(plugin.getDataFolder() + File.separator + name);
-        if (file.exists()) return;
-        if (!file.getParentFile().exists()) {
-            file.getParentFile().mkdirs();
+        if (Files.exists(target)) {
+            return;
         }
-        URLConnection connection = null;
         try {
-            connection = url.openConnection();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        connection.setUseCaches(false);
-        try (FileOutputStream outputStream = new FileOutputStream(file)) {
-            int read;
-            InputStream inputStream = connection.getInputStream();
-            byte[] bytes = new byte[1024];
-            while ((read = inputStream.read(bytes)) != -1) {
-                outputStream.write(bytes, 0, read);
+            Path parent = target.getParent();
+            if (parent != null) {
+                createSafeParentDirectories(dataDirectory, parent);
+            }
+            URLConnection connection = url.openConnection();
+            connection.setUseCaches(false);
+            try (InputStream inputStream = connection.getInputStream()) {
+                Files.copy(inputStream, target);
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not copy bundled resource " + name + ": " + e.getMessage(), e);
+        }
+    }
+
+    private static void createSafeParentDirectories(Path dataDirectory, Path parent) throws IOException {
+        Files.createDirectories(dataDirectory);
+        Path realDataDirectory = dataDirectory.toRealPath();
+        Path current = dataDirectory;
+        for (Path segment : dataDirectory.relativize(parent)) {
+            current = current.resolve(segment);
+            try {
+                Files.createDirectory(current);
+            } catch (FileAlreadyExistsException ignored) {
+            }
+            if (!current.toRealPath().startsWith(realDataDirectory)) {
+                throw new IllegalArgumentException("Resource destination must be inside the plugin data directory");
+            }
         }
     }
 

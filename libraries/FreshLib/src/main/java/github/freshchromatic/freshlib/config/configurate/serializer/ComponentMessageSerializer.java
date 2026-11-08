@@ -20,7 +20,8 @@ public class ComponentMessageSerializer implements TypeSerializer<ComponentMessa
     }
 
     @Override
-    public void serialize(Type type, @Nullable ComponentMessage obj, ConfigurationNode node) throws SerializationException {
+    public void serialize(Type type, @Nullable ComponentMessage obj, ConfigurationNode node)
+        throws SerializationException {
         if (obj == null) {
             node.set(null);
         } else {

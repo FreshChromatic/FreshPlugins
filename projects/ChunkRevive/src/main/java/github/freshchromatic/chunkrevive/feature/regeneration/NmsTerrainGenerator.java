@@ -1,5 +1,7 @@
 package github.freshchromatic.chunkrevive.feature.regeneration;
 
+import github.freshchromatic.chunkrevive.nms.ChunkArea;
+
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.nms.NmsPlatformLoader;
@@ -19,16 +21,17 @@ import java.util.function.IntConsumer;
  * No NMS or CraftBukkit types are allowed in this class.
  */
 public final class NmsTerrainGenerator {
-    private static TerrainGateway gateway;
-    private static PluginConfig.Structure.EntityExemptions entityExemptions =
-        new PluginConfig.Structure.EntityExemptions();
-    private static PluginConfig.Regen.ThreadPool threadPool = new PluginConfig.Regen.ThreadPool();
-    private static PluginConfig.Regen.MemorySafety memorySafety = new PluginConfig.Regen.MemorySafety();
-    private static int contextRadius = 2;
-    private static int applyBatchSize = 8;
-    private static boolean debugLogging;
 
-    private NmsTerrainGenerator() {}
+    private static TerrainGateway                          gateway;
+    private static PluginConfig.Structure.EntityExemptions entityExemptions = new PluginConfig.Structure.EntityExemptions();
+    private static PluginConfig.Regen.ThreadPool           threadPool       = new PluginConfig.Regen.ThreadPool();
+    private static PluginConfig.Regen.MemorySafety         memorySafety     = new PluginConfig.Regen.MemorySafety();
+    private static int                                     contextRadius    = 2;
+    private static int                                     applyBatchSize   = 8;
+    private static boolean                                 debugLogging;
+
+    private NmsTerrainGenerator() {
+    }
 
     public static void init(JavaPlugin plugin) {
         gateway = NmsPlatformLoader.load().terrain();
@@ -86,47 +89,33 @@ public final class NmsTerrainGenerator {
         requireGateway().endBulkSession();
     }
 
-    public static CompletableFuture<Void> generate(
-        World world,
-        Collection<ChunkCoordinate> chunks,
-        long seed,
-        IntConsumer progress,
-        Consumer<String> stage,
-        BooleanSupplier cancelled,
-        int[] extraContextBounds
-    ) {
-        return requireGateway().generate(
-            world, chunks, seed, progress, stage, cancelled, extraContextBounds);
+    public static CompletableFuture<Void> generate(World world, Collection<ChunkCoordinate> chunks, long seed,
+        IntConsumer progress, Consumer<String> stage, BooleanSupplier cancelled, ChunkArea extraContextBounds) {
+        return requireGateway().generate(world, chunks, seed, progress, stage, cancelled, extraContextBounds);
     }
 
     public static void shutdownPool() {
-        if (gateway != null) gateway.shutdown();
+        if (gateway != null) {
+            gateway.shutdown();
+        }
     }
 
     private static TerrainGateway requireGateway() {
-        if (gateway == null) throw new IllegalStateException("NMS terrain adapter has not been initialized");
+        if (gateway == null) {
+            throw new IllegalStateException("NMS terrain adapter has not been initialized");
+        }
         return gateway;
     }
 
     private static void applySettings() {
-        if (gateway == null) return;
-        gateway.configure(new TerrainSettings(
-            new TerrainSettings.EntityExemptions(
-                entityExemptions.keepRidden,
-                entityExemptions.keepLeashed,
-                entityExemptions.keepAllayAttracted,
-                entityExemptions.keepTamedPets,
-                entityExemptions.tamedPetOwnerRadius),
-            new TerrainSettings.ThreadPool(
-                threadPool.parallelism,
-                threadPool.priority,
-                threadPool.daemon,
-                threadPool.asyncMode),
-            new TerrainSettings.MemorySafety(
-                memorySafety.enabled,
-                memorySafety.maxGenerationThreads),
-            contextRadius,
-            applyBatchSize,
+        if (gateway == null) {
+            return;
+        }
+        gateway.configure(new TerrainSettings(new TerrainSettings.EntityExemptions(entityExemptions.keepRidden,
+            entityExemptions.keepLeashed, entityExemptions.keepAllayAttracted, entityExemptions.keepTamedPets,
+            entityExemptions.tamedPetOwnerRadius), new TerrainSettings.ThreadPool(threadPool.parallelism,
+                threadPool.priority, threadPool.daemon, threadPool.asyncMode), new TerrainSettings.MemorySafety(
+                    memorySafety.enabled, memorySafety.maxGenerationThreads), contextRadius, applyBatchSize,
             debugLogging));
     }
 }

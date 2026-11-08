@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LandProtectionConfigMigrationTest {
+
     @Test
     void legacyValuesSurviveMigrationAndReload(@TempDir Path directory) throws Exception {
         Path path = directory.resolve("config.yml");

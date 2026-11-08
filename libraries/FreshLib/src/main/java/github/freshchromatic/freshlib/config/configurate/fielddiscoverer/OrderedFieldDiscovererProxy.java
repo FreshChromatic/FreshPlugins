@@ -18,7 +18,7 @@ import java.util.List;
  */
 public class OrderedFieldDiscovererProxy<T> implements FieldDiscoverer<T> {
 
-    private final FieldDiscoverer<T> fieldDiscoverer;
+    private final FieldDiscoverer<T>                   fieldDiscoverer;
     private final Comparator<FieldCollectorData<T, ?>> order;
 
     public OrderedFieldDiscovererProxy(FieldDiscoverer<T> fieldDiscoverer, Comparator<FieldCollectorData<T, ?>> order) {
@@ -27,10 +27,11 @@ public class OrderedFieldDiscovererProxy<T> implements FieldDiscoverer<T> {
     }
 
     @Override
-    public @Nullable <V> InstanceFactory<T> discover(AnnotatedType target, FieldCollector<T, V> collector) throws SerializationException {
+    public @Nullable <V> InstanceFactory<T> discover(AnnotatedType target, FieldCollector<T, V> collector)
+        throws SerializationException {
         List<FieldCollectorData<T, V>> data = new ArrayList<>();
-        FieldCollector<T, V> fieldCollector = (name, type, annotations, deserializer, serializer) ->
-                data.add(new FieldCollectorData<>(name, type, annotations, deserializer, serializer));
+        FieldCollector<T, V> fieldCollector = (name, type, annotations, deserializer, serializer) -> data.add(
+            new FieldCollectorData<>(name, type, annotations, deserializer, serializer));
 
         InstanceFactory<T> instanceFactory = fieldDiscoverer.discover(target, fieldCollector);
         if (instanceFactory == null) {
@@ -47,15 +48,14 @@ public class OrderedFieldDiscovererProxy<T> implements FieldDiscoverer<T> {
 
     public static class FieldCollectorData<T, V> {
 
-        private final String name;
-        private final AnnotatedType type;
-        private final AnnotatedElement annotations;
-        private final FieldData.Deserializer<T> deserializer;
+        private final String                                name;
+        private final AnnotatedType                         type;
+        private final AnnotatedElement                      annotations;
+        private final FieldData.Deserializer<T>             deserializer;
         private final CheckedFunction<V, Object, Exception> serializer;
 
         public FieldCollectorData(String name, AnnotatedType type, AnnotatedElement annotations,
-                                  FieldData.Deserializer<T> deserializer,
-                                  CheckedFunction<V, Object, Exception> serializer) {
+            FieldData.Deserializer<T> deserializer, CheckedFunction<V, Object, Exception> serializer) {
             this.name = name;
             this.type = type;
             this.annotations = annotations;

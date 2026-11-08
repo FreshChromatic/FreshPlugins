@@ -1,16 +1,12 @@
 package github.freshchromatic.chunkrevive.presentation.command;
 
+import github.freshchromatic.chunkrevive.bootstrap.ChunkRevivePlugin;
+
 import github.freshchromatic.chunkrevive.feature.marking.MarkService;
+import github.freshchromatic.chunkrevive.feature.status.MarkedChunkClaimCounter;
 import github.freshchromatic.chunkrevive.feature.scanning.ChunkScanService;
 import github.freshchromatic.chunkrevive.feature.reset.ResetService;
 import github.freshchromatic.chunkrevive.feature.structure.StructureService;
-import github.freshchromatic.chunkrevive.presentation.command.TuningCommands;
-import github.freshchromatic.chunkrevive.presentation.command.StatusCommands;
-import github.freshchromatic.chunkrevive.presentation.command.StructureCommands;
-import github.freshchromatic.chunkrevive.presentation.command.MarkCommands;
-import github.freshchromatic.chunkrevive.presentation.command.ScanCommands;
-import github.freshchromatic.chunkrevive.presentation.command.ResetCommands;
-import github.freshchromatic.chunkrevive.presentation.command.AdminCommands;
 import github.freshchromatic.chunkrevive.config.Messages;
 import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
 import github.freshchromatic.chunkrevive.feature.reset.DeletionService;
@@ -23,6 +19,7 @@ import github.freshchromatic.freshlib.command.PlayerCommander;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.World;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.SenderMapper;
 import org.incendo.cloud.execution.ExecutionCoordinator;
@@ -31,6 +28,7 @@ import org.incendo.cloud.parser.standard.IntegerParser;
 import org.incendo.cloud.parser.standard.StringParser;
 import org.incendo.cloud.suggestion.BlockingSuggestionProvider;
 import org.incendo.cloud.suggestion.Suggestion;
+import org.incendo.cloud.suggestion.SuggestionProvider;
 import org.incendo.cloud.brigadier.suggestion.TooltipSuggestion;
 import io.papermc.paper.command.brigadier.MessageComponentSerializer;
 import org.incendo.cloud.description.Description;
@@ -44,27 +42,30 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 @SuppressWarnings("UnstableApiUsage")
 public final class ChunkReviveCommand {
 
-    private final github.freshchromatic.chunkrevive.bootstrap.ChunkRevivePlugin plugin;
-    private final MarkRegistry markRegistry;
-    private Messages messages;
-    private final StructureRegistry structureRegistry;
-    private final WorldAccessPolicy worldAccessPolicy;
-    private final DiskChunkScanner scanner;
-    private final DeletionService deletionService;
-    private final ConfirmationManager confirmationManager = new ConfirmationManager();
-    private final TuningCommands tuningCommands;
-    private final StatusCommands statusCommands;
-    private final StructureCommands structureCommands;
-    private final MarkCommands markCommands;
-    private final ScanCommands scanCommands;
-    private final ResetCommands maintenanceCommands;
-    private final AdminCommands adminCommands;
+    private final ChunkRevivePlugin         plugin;
+    private final MarkRegistry              markRegistry;
+    private Messages                        messages;
+    private final StructureRegistry         structureRegistry;
+    private final WorldAccessPolicy         worldAccessPolicy;
+    private final DiskChunkScanner          scanner;
+    private final DeletionService           deletionService;
+    private final ConfirmationManager       confirmationManager = new ConfirmationManager();
+    private final TuningCommands            tuningCommands;
+    private final StatusCommands            statusCommands;
+    private final StructureCommands         structureCommands;
+    private final MarkCommands              markCommands;
+    private final ScanCommands              scanCommands;
+    private final ResetCommands             maintenanceCommands;
+    private final RegionPruneCommands       regionPruneCommands;
+    private final AdminCommands             adminCommands;
     private final CommandManager<Commander> commandManager;
-    private final MinecraftHelp<Commander> minecraftHelp;
+    private final MinecraftHelp<Commander>  minecraftHelp;
 
     public void setMessages(Messages messages) {
         this.messages = messages;
@@ -74,14 +75,24 @@ public final class ChunkReviveCommand {
         this.markCommands.setMessages(messages);
         this.scanCommands.setMessages(messages);
         this.maintenanceCommands.setMessages(messages);
+        this.regionPruneCommands.setMessages(messages);
         this.adminCommands.setMessages(messages);
     }
 
-    public ChunkReviveCommand(github.freshchromatic.chunkrevive.bootstrap.ChunkRevivePlugin plugin, MarkRegistry markRegistry, Messages messages,
-                      StructureRegistry structureRegistry, WorldAccessPolicy worldAccessPolicy, DiskChunkScanner scanner,
-                      DeletionService deletionService, MarkService markService,
-                      ChunkScanService chunkScanService, ResetService resetService,
-                      StructureService structureService) {
+    public ChunkReviveCommand(ChunkRevivePlugin plugin, MarkRegistry markRegistry, Messages messages,
+        StructureRegistry structureRegistry, WorldAccessPolicy worldAccessPolicy, DiskChunkScanner scanner,
+        DeletionService deletionService, MarkService markService, ChunkScanService chunkScanService,
+        ResetService resetService, StructureService structureService) {
+        this(plugin, markRegistry, messages, structureRegistry, worldAccessPolicy, scanner, deletionService,
+            markService, chunkScanService, resetService, structureService, ignored -> {
+            });
+    }
+
+    public ChunkReviveCommand(ChunkRevivePlugin plugin, MarkRegistry markRegistry, Messages messages,
+        StructureRegistry structureRegistry, WorldAccessPolicy worldAccessPolicy, DiskChunkScanner scanner,
+        DeletionService deletionService, MarkService markService, ChunkScanService chunkScanService,
+        ResetService resetService, StructureService structureService,
+        Consumer<List<DeletionService.CancelledDeletionJob>> deletionCancellation) {
         this.plugin = plugin;
         this.markRegistry = markRegistry;
         this.messages = messages;
@@ -90,22 +101,25 @@ public final class ChunkReviveCommand {
         this.scanner = scanner;
         this.deletionService = deletionService;
         this.tuningCommands = new TuningCommands(plugin, markRegistry, scanner, confirmationManager, messages);
-        this.statusCommands = new StatusCommands(
-            plugin, markRegistry, structureRegistry, scanner, deletionService, messages);
-        this.adminCommands = new AdminCommands(
-            plugin, markRegistry, scanner, deletionService, messages);
-        this.maintenanceCommands = new ResetCommands(
-            plugin, markRegistry, deletionService,
-            confirmationManager, this::regenerateStructure, resetService, chunkScanService, messages);
-        this.structureCommands = new StructureCommands(
-            plugin, structureService, maintenanceCommands::bulkRegenerate, messages);
-        this.markCommands = new MarkCommands(plugin, markService, messages);
-        this.scanCommands = new ScanCommands(
-            plugin, worldAccessPolicy, chunkScanService, maintenanceCommands::bulkRegenerate,
-            confirmationManager, deletionService, messages);
+        var claimCounter = new MarkedChunkClaimCounter(markRegistry.getLandProtection(),
+            task -> Bukkit.getGlobalRegionScheduler().runDelayed(plugin, scheduledTask -> task.run(), 1L),
+            Bukkit::getWorld);
+        this.statusCommands = new StatusCommands(plugin, markRegistry, structureRegistry, scanner, deletionService,
+            claimCounter, messages);
+        this.adminCommands = new AdminCommands(plugin, markRegistry, scanner, deletionService, messages,
+            deletionCancellation);
+        this.maintenanceCommands = new ResetCommands(plugin, deletionService, confirmationManager,
+            this::regenerateStructure, resetService, chunkScanService, messages);
+        this.regionPruneCommands = new RegionPruneCommands(plugin, markRegistry, deletionService, confirmationManager,
+            resetService, messages);
+        this.structureCommands = new StructureCommands(plugin, structureService, maintenanceCommands::bulkRegenerate,
+            messages);
+        this.markCommands = new MarkCommands(plugin, markService, confirmationManager, messages);
+        this.scanCommands = new ScanCommands(plugin, worldAccessPolicy, chunkScanService,
+            maintenanceCommands::bulkRegenerate, confirmationManager, deletionService, messages);
 
-        final SenderMapper<CommandSourceStack, Commander> senderMapper =
-            SenderMapper.create(FreshLibCommander::from, c -> ((FreshLibCommander) c).stack());
+        final SenderMapper<CommandSourceStack, Commander> senderMapper = SenderMapper.create(FreshLibCommander::from,
+            c -> ((FreshLibCommander) c).stack());
 
         this.commandManager = PaperCommandManager.builder(senderMapper)
             .executionCoordinator(ExecutionCoordinator.simpleCoordinator())
@@ -116,12 +130,8 @@ public final class ChunkReviveCommand {
             .audienceProvider(AudienceProvider.nativeAudience())
             .commandPrefix("/cr help")
             .colors(MinecraftHelp.helpColors(
-                TextColor.fromHexString("#0044AA"),
-                NamedTextColor.WHITE,
-                TextColor.fromHexString("#0099FF"),
-                NamedTextColor.GRAY,
-                NamedTextColor.DARK_GRAY
-            ))
+                TextColor.fromHexString("#0044AA"), NamedTextColor.WHITE, TextColor.fromHexString("#0099FF"),
+                NamedTextColor.GRAY, NamedTextColor.DARK_GRAY))
             .build();
     }
 
@@ -162,24 +172,24 @@ public final class ChunkReviveCommand {
         var root = commandManager.commandBuilder("cr");
 
         // /cr (shows help index)
-        commandManager.command(root
-            .permission("chunkrevive.admin")
-            .handler(ctx -> minecraftHelp.queryCommands("", ctx.sender())));
+        commandManager.command(root.permission("chunkrevive.admin").handler(ctx -> minecraftHelp.queryCommands("",
+            ctx.sender())));
 
         // /cr help [query]
         commandManager.command(root.literal("help")
             .permission("chunkrevive.admin")
             .optional("query", StringParser.greedyStringParser())
             .commandDescription(Description.of(messages.descriptions.help))
-            .handler(ctx -> {
-                String query = ctx.getOrDefault("query", "");
-                // MinecraftHelp uses a bare number as the page for the root command index.
-                // Prefixing it with "cr" turns the request into help for /cr instead.
-                if (!query.isEmpty() && !query.matches("\\d+") && !query.startsWith("cr")) {
-                    query = "cr " + query;
-                }
-                minecraftHelp.queryCommands(normalizeHelpQuery(query, ctx.sender()), ctx.sender());
-            }));
+            .handler(
+                ctx -> {
+                    String query = ctx.getOrDefault("query", "");
+                    // MinecraftHelp uses a bare number as the page for the root command index.
+                    // Prefixing it with "cr" turns the request into help for /cr instead.
+                    if (!query.isEmpty() && !query.matches("\\d+") && !query.startsWith("cr")) {
+                        query = "cr " + query;
+                    }
+                    minecraftHelp.queryCommands(normalizeHelpQuery(query, ctx.sender()), ctx.sender());
+                }));
 
         // /cr mark (shows mark subcommands help)
         commandManager.command(root.literal("mark")
@@ -201,8 +211,7 @@ public final class ChunkReviveCommand {
             .handler(structureCommands::markHere));
 
         // /cr mark here — players only, current chunk
-        commandManager.command(markHereNode
-            .commandDescription(Description.of(messages.descriptions.markMark)) // uses same desc
+        commandManager.command(markHereNode.commandDescription(Description.of(messages.descriptions.markMark)) // uses same desc
             .handler(markCommands::mark));
 
         // /cr mark chunk <world> <cx> <cz> — specific chunk
@@ -333,9 +342,8 @@ public final class ChunkReviveCommand {
         var regenHereNode = regenNode.literal("here").permission("chunkrevive.admin").senderType(PlayerCommander.class);
 
         // /cr regen here
-        commandManager.command(regenHereNode
-            .commandDescription(Description.of(messages.descriptions.regenHere))
-            .handler(maintenanceCommands::regenerateCurrent));
+        commandManager.command(regenHereNode.commandDescription(Description.of(
+            messages.descriptions.regenHere)).handler(maintenanceCommands::regenerateCurrent));
 
         // /cr regen here struct (moved from the former top-level /cr regen struct)
         commandManager.command(regenHereNode.literal("struct")
@@ -414,34 +422,34 @@ public final class ChunkReviveCommand {
             .permission("chunkrevive.admin")
             .handler(ctx -> minecraftHelp.queryCommands("cr reset ", ctx.sender())));
         var resetNode = root.literal("reset");
-        var resetHereNode = resetNode.literal("here").permission("chunkrevive.admin")
-            .senderType(PlayerCommander.class);
-        commandManager.command(resetHereNode
-            .commandDescription(Description.of(messages.descriptions.resetHere))
-            .handler(ctx -> maintenanceCommands.resetCurrent(ctx, false)));
+        var resetHereNode = resetNode.literal("here").permission("chunkrevive.admin").senderType(PlayerCommander.class);
+        commandManager.command(resetHereNode.commandDescription(Description.of(
+            messages.descriptions.resetHere)).handler(ctx -> maintenanceCommands.resetCurrent(ctx, false)));
         commandManager.command(resetHereNode.literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.resetHereConfirm))
             .handler(ctx -> maintenanceCommands.resetCurrent(ctx, true)));
         commandManager.command(resetHereNode.literal("struct")
             .commandDescription(Description.of(messages.descriptions.resetHereStruct))
             .handler(ctx -> maintenanceCommands.resetCurrentStructure(ctx, false)));
-        commandManager.command(resetHereNode.literal("struct").literal("--confirm")
+        commandManager.command(resetHereNode.literal("struct")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.resetHereStructConfirm))
             .handler(ctx -> maintenanceCommands.resetCurrentStructure(ctx, true)));
         commandManager.command(resetHereNode.literal("biome")
             .commandDescription(Description.of(messages.descriptions.resetHereBiome))
             .handler(ctx -> scanCommands.resetHereBiome(ctx, false, maintenanceCommands)));
-        commandManager.command(resetHereNode.literal("biome").literal("--confirm")
+        commandManager.command(resetHereNode.literal("biome")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.resetHereBiomeConfirm))
             .handler(ctx -> scanCommands.resetHereBiome(ctx, true, maintenanceCommands)));
 
-        var resetChunkNode = resetNode.literal("chunk").permission("chunkrevive.admin")
+        var resetChunkNode = resetNode.literal("chunk")
+            .permission("chunkrevive.admin")
             .required("world", StringParser.stringParser(), worldSuggestions())
             .required("cx", IntegerParser.integerParser(), chunkXSuggestions())
             .required("cz", IntegerParser.integerParser(), chunkZSuggestions());
-        commandManager.command(resetChunkNode
-            .commandDescription(Description.of(messages.descriptions.resetChunk))
-            .handler(ctx -> maintenanceCommands.resetCoordinates(ctx, false)));
+        commandManager.command(resetChunkNode.commandDescription(Description.of(
+            messages.descriptions.resetChunk)).handler(ctx -> maintenanceCommands.resetCoordinates(ctx, false)));
         commandManager.command(resetChunkNode.literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.resetChunkConfirm))
             .handler(ctx -> maintenanceCommands.resetCoordinates(ctx, true)));
@@ -456,13 +464,16 @@ public final class ChunkReviveCommand {
         commandManager.command(resetAllNode.literal("all")
             .commandDescription(Description.of(messages.descriptions.resetAllAll))
             .handler(ctx -> maintenanceCommands.resetAll(ctx, false)));
-        commandManager.command(resetAllNode.literal("chunks").literal("--confirm")
+        commandManager.command(resetAllNode.literal("chunks")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.resetAllChunksConfirm))
             .handler(ctx -> maintenanceCommands.resetAllChunks(ctx, true)));
-        commandManager.command(resetAllNode.literal("structures").literal("--confirm")
+        commandManager.command(resetAllNode.literal("structures")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.resetAllStructuresConfirm))
             .handler(ctx -> maintenanceCommands.resetAllStructures(ctx, true)));
-        commandManager.command(resetAllNode.literal("all").literal("--confirm")
+        commandManager.command(resetAllNode.literal("all")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.resetAllAllConfirm))
             .handler(ctx -> maintenanceCommands.resetAll(ctx, true)));
 
@@ -476,8 +487,7 @@ public final class ChunkReviveCommand {
             .senderType(PlayerCommander.class)
             .commandDescription(Description.of(messages.descriptions.deleteChunkHere))
             .handler(maintenanceCommands::deleteChunkHere));
-        commandManager.command(deleteChunkNode
-            .required("world", StringParser.stringParser(), worldSuggestions())
+        commandManager.command(deleteChunkNode.required("world", StringParser.stringParser(), worldSuggestions())
             .required("cx", IntegerParser.integerParser(), chunkXSuggestions())
             .required("cz", IntegerParser.integerParser(), chunkZSuggestions())
             .commandDescription(Description.of(messages.descriptions.deleteChunkCoords))
@@ -485,44 +495,45 @@ public final class ChunkReviveCommand {
         commandManager.command(deleteChunkNode.literal("all")
             .commandDescription(Description.of(messages.descriptions.deleteChunkAll))
             .handler(ctx -> maintenanceCommands.deleteChunkAll(ctx, false)));
-        commandManager.command(deleteChunkNode.literal("all").literal("--confirm")
+        commandManager.command(deleteChunkNode.literal("all")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.deleteChunkAll))
             .handler(ctx -> maintenanceCommands.deleteChunkAll(ctx, true)));
 
-        var deleteHereNode = root.literal("delete").literal("here")
-            .permission("chunkrevive.admin").senderType(PlayerCommander.class);
-        commandManager.command(deleteHereNode
-            .commandDescription(Description.of(messages.descriptions.deleteHereChunk))
-            .handler(maintenanceCommands::deleteChunkHere));
+        var deleteHereNode = root.literal("delete")
+            .literal("here")
+            .permission("chunkrevive.admin")
+            .senderType(PlayerCommander.class);
+        commandManager.command(deleteHereNode.commandDescription(Description.of(
+            messages.descriptions.deleteHereChunk)).handler(maintenanceCommands::deleteChunkHere));
         commandManager.command(deleteHereNode.literal("chunk")
             .commandDescription(Description.of(messages.descriptions.deleteHereChunk))
             .handler(maintenanceCommands::deleteChunkHere));
         commandManager.command(deleteHereNode.literal("struct")
             .commandDescription(Description.of(messages.descriptions.deleteHereStruct))
             .handler(ctx -> maintenanceCommands.deleteHereStructure(ctx, false)));
-        commandManager.command(deleteHereNode.literal("struct").literal("--confirm")
+        commandManager.command(deleteHereNode.literal("struct")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.deleteHereStruct))
             .handler(ctx -> maintenanceCommands.deleteHereStructure(ctx, true)));
         commandManager.command(deleteHereNode.literal("biome")
             .commandDescription(Description.of(messages.descriptions.deleteHereBiome))
             .handler(ctx -> scanCommands.deleteHereBiome(ctx, false)));
-        commandManager.command(deleteHereNode.literal("biome").literal("--confirm")
+        commandManager.command(deleteHereNode.literal("biome")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.deleteHereBiome))
             .handler(ctx -> scanCommands.deleteHereBiome(ctx, true)));
 
         var deleteMarkedNode = root.literal("delete").literal("marked").permission("chunkrevive.admin");
-        commandManager.command(deleteMarkedNode
-            .commandDescription(Description.of(messages.descriptions.deleteMarked))
-            .handler(ctx -> maintenanceCommands.deleteMarked(ctx, null, false)));
+        commandManager.command(deleteMarkedNode.commandDescription(Description.of(
+            messages.descriptions.deleteMarked)).handler(ctx -> maintenanceCommands.deleteMarked(ctx, null, false)));
         commandManager.command(deleteMarkedNode.literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.deleteMarked))
             .handler(ctx -> maintenanceCommands.deleteMarked(ctx, null, true)));
-        commandManager.command(deleteMarkedNode
-            .required("world", StringParser.stringParser(), worldSuggestions())
+        commandManager.command(deleteMarkedNode.required("world", StringParser.stringParser(), worldSuggestions())
             .commandDescription(Description.of(messages.descriptions.deleteMarkedWorld))
             .handler(ctx -> maintenanceCommands.deleteMarked(ctx, ctx.get("world"), false)));
-        commandManager.command(deleteMarkedNode
-            .required("world", StringParser.stringParser(), worldSuggestions())
+        commandManager.command(deleteMarkedNode.required("world", StringParser.stringParser(), worldSuggestions())
             .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.deleteMarkedWorld))
             .handler(ctx -> maintenanceCommands.deleteMarked(ctx, ctx.get("world"), true)));
@@ -530,56 +541,56 @@ public final class ChunkReviveCommand {
         commandManager.command(root.literal("prune")
             .permission("chunkrevive.admin")
             .handler(ctx -> minecraftHelp.queryCommands("cr prune ", ctx.sender())));
-        var pruneEmptyNode = root.literal("prune").literal("empty")
+        var pruneEmptyNode = root.literal("prune")
+            .literal("empty")
             .permission("chunkrevive.admin")
             .required("world", StringParser.stringParser(), worldSuggestions());
-        commandManager.command(pruneEmptyNode
-            .commandDescription(Description.of(messages.descriptions.pruneEmpty))
-            .handler(ctx -> maintenanceCommands.pruneEmpty(ctx, false)));
+        commandManager.command(pruneEmptyNode.commandDescription(Description.of(
+            messages.descriptions.pruneEmpty)).handler(ctx -> regionPruneCommands.pruneEmpty(ctx, false)));
         commandManager.command(pruneEmptyNode.literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.pruneEmpty))
-            .handler(ctx -> maintenanceCommands.pruneEmpty(ctx, true)));
+            .handler(ctx -> regionPruneCommands.pruneEmpty(ctx, true)));
         var pruneRegionNode = root.literal("prune").literal("region").permission("chunkrevive.admin");
         commandManager.command(pruneRegionNode.literal("here")
             .senderType(PlayerCommander.class)
             .commandDescription(Description.of(messages.descriptions.pruneRegionHere))
-            .handler(ctx -> maintenanceCommands.pruneRegionHere(ctx, false)));
-        commandManager.command(pruneRegionNode.literal("here").literal("--confirm")
+            .handler(ctx -> regionPruneCommands.pruneRegionHere(ctx, false)));
+        commandManager.command(pruneRegionNode.literal("here")
+            .literal("--confirm")
             .senderType(PlayerCommander.class)
             .commandDescription(Description.of(messages.descriptions.pruneRegionHere))
-            .handler(ctx -> maintenanceCommands.pruneRegionHere(ctx, true)));
-        commandManager.command(pruneRegionNode
-            .required("world", StringParser.stringParser(), worldSuggestions())
+            .handler(ctx -> regionPruneCommands.pruneRegionHere(ctx, true)));
+        commandManager.command(pruneRegionNode.required("world", StringParser.stringParser(), worldSuggestions())
             .required("rx", IntegerParser.integerParser())
             .required("rz", IntegerParser.integerParser())
             .commandDescription(Description.of(messages.descriptions.pruneRegionCoords))
-            .handler(ctx -> maintenanceCommands.pruneRegionCoordinates(ctx, false)));
-        commandManager.command(pruneRegionNode
-            .required("world", StringParser.stringParser(), worldSuggestions())
+            .handler(ctx -> regionPruneCommands.pruneRegionCoordinates(ctx, false)));
+        commandManager.command(pruneRegionNode.required("world", StringParser.stringParser(), worldSuggestions())
             .required("rx", IntegerParser.integerParser())
             .required("rz", IntegerParser.integerParser())
             .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.pruneRegionCoords))
-            .handler(ctx -> maintenanceCommands.pruneRegionCoordinates(ctx, true)));
+            .handler(ctx -> regionPruneCommands.pruneRegionCoordinates(ctx, true)));
         commandManager.command(pruneRegionNode.literal("chunk")
             .required("world", StringParser.stringParser(), worldSuggestions())
             .required("cx", IntegerParser.integerParser(), chunkXSuggestions())
             .required("cz", IntegerParser.integerParser(), chunkZSuggestions())
             .commandDescription(Description.of(messages.descriptions.pruneRegionChunk))
-            .handler(ctx -> maintenanceCommands.pruneRegionByChunk(ctx, false)));
+            .handler(ctx -> regionPruneCommands.pruneRegionByChunk(ctx, false)));
         commandManager.command(pruneRegionNode.literal("chunk")
             .required("world", StringParser.stringParser(), worldSuggestions())
             .required("cx", IntegerParser.integerParser(), chunkXSuggestions())
             .required("cz", IntegerParser.integerParser(), chunkZSuggestions())
             .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.pruneRegionChunk))
-            .handler(ctx -> maintenanceCommands.pruneRegionByChunk(ctx, true)));
+            .handler(ctx -> regionPruneCommands.pruneRegionByChunk(ctx, true)));
         commandManager.command(pruneRegionNode.literal("all")
             .commandDescription(Description.of(messages.descriptions.pruneRegionAll))
-            .handler(ctx -> maintenanceCommands.pruneRegionAll(ctx, false)));
-        commandManager.command(pruneRegionNode.literal("all").literal("--confirm")
+            .handler(ctx -> regionPruneCommands.pruneRegionAll(ctx, false)));
+        commandManager.command(pruneRegionNode.literal("all")
+            .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.pruneRegionAll))
-            .handler(ctx -> maintenanceCommands.pruneRegionAll(ctx, true)));
+            .handler(ctx -> regionPruneCommands.pruneRegionAll(ctx, true)));
 
         // /cr status
         commandManager.command(root.literal("status")
@@ -591,8 +602,7 @@ public final class ChunkReviveCommand {
         var serverNode = root.literal("server");
 
         // /cr server
-        commandManager.command(serverNode
-            .permission("chunkrevive.admin")
+        commandManager.command(serverNode.permission("chunkrevive.admin")
             .commandDescription(Description.of(messages.descriptions.server))
             .handler(statusCommands::serverStatus));
 
@@ -604,9 +614,8 @@ public final class ChunkReviveCommand {
             .handler(adminCommands::regionsCount));
 
         var tuneNode = root.literal("tune").permission("chunkrevive.admin");
-        commandManager.command(tuneNode
-            .commandDescription(Description.of(messages.descriptions.tune))
-            .handler(tuningCommands::overview));
+        commandManager.command(tuneNode.commandDescription(Description.of(messages.descriptions.tune)).handler(
+            tuningCommands::overview));
         commandManager.command(tuneNode.literal("preview")
             .required("profile", StringParser.stringParser(), tuningProfileSuggestions())
             .commandDescription(Description.of(messages.descriptions.tune))
@@ -636,67 +645,58 @@ public final class ChunkReviveCommand {
         var structNode = root.literal("struct", "structure");
 
         // /cr struct (shows struct subcommands help)
-        commandManager.command(structNode
-            .permission("chunkrevive.keep")
-            .handler(ctx -> minecraftHelp.queryCommands("cr struct ", ctx.sender())));
+        commandManager.command(structNode.permission("chunkrevive.keep").handler(ctx -> minecraftHelp.queryCommands(
+            "cr struct ", ctx.sender())));
 
         // /cr struct check
-        commandManager.command(structNode
-            .permission("chunkrevive.keep")
+        commandManager.command(structNode.permission("chunkrevive.keep")
             .senderType(PlayerCommander.class)
             .literal("check")
             .commandDescription(Description.of(messages.descriptions.structCheck))
             .handler(structureCommands::check));
 
         // /cr struct list [page]
-        commandManager.command(structNode
-            .permission("chunkrevive.keep")
+        commandManager.command(structNode.permission("chunkrevive.keep")
             .literal("list")
             .optional("page", IntegerParser.integerParser(1))
             .commandDescription(Description.of(messages.descriptions.structList))
             .handler(structureCommands::list));
 
         // /cr struct regen <groupId>
-        commandManager.command(structNode
-            .permission("chunkrevive.admin")
+        commandManager.command(structNode.permission("chunkrevive.admin")
             .literal("regen")
             .required("groupId", StringParser.stringParser(), groupSuggestions())
             .commandDescription(Description.of(messages.descriptions.structRegen))
             .handler(structureCommands::refresh));
 
         // /cr struct unblock <groupId>
-        commandManager.command(structNode
-            .permission("chunkrevive.admin")
+        commandManager.command(structNode.permission("chunkrevive.admin")
             .literal("unblock")
             .required("groupId", StringParser.stringParser(), groupSuggestions())
             .commandDescription(Description.of(messages.descriptions.structUnblock))
             .handler(structureCommands::unblock));
 
         // /cr struct block <groupId>
-        commandManager.command(structNode
-            .permission("chunkrevive.admin")
+        commandManager.command(structNode.permission("chunkrevive.admin")
             .literal("block")
             .required("groupId", StringParser.stringParser(), groupSuggestions())
             .commandDescription(Description.of(messages.descriptions.structBlock))
             .handler(structureCommands::block));
 
         // /cr struct reset <groupId>
-        commandManager.command(structNode
-            .permission("chunkrevive.admin")
+        commandManager.command(structNode.permission("chunkrevive.admin")
             .literal("reset")
             .required("groupId", StringParser.stringParser(), groupSuggestions())
             .commandDescription(Description.of(messages.descriptions.structReset))
             .handler(structureCommands::reset));
 
         // /cr struct resetall
-        commandManager.command(structNode
-            .permission("chunkrevive.admin")
+        commandManager.command(structNode.permission("chunkrevive.admin")
             .literal("resetall")
             .commandDescription(Description.of(messages.descriptions.structResetAll))
             .handler(ctx -> structureCommands.resetAll(ctx, false)));
 
-        commandManager.command(structNode
-            .permission("chunkrevive.admin")
+        commandManager.command(structNode.permission("chunkrevive.admin")
             .literal("resetall")
             .literal("--confirm")
             .commandDescription(Description.of(messages.descriptions.structResetAllConfirm))
@@ -705,21 +705,34 @@ public final class ChunkReviveCommand {
 
     // ── Handlers ─────────────────────────────────────────────────────────────
 
-
-    private static BlockingSuggestionProvider.Strings<Commander> worldSuggestions() {
-        return (ctx, input) -> Bukkit.getWorlds().stream().map(org.bukkit.World::getName).toList();
+    private SuggestionProvider<Commander> worldSuggestions() {
+        return worldNameSuggestions(false);
     }
 
     private static BlockingSuggestionProvider.Strings<Commander> tuningProfileSuggestions() {
         return (ctx, input) -> List.of("optimized", "balanced", "performance");
     }
 
-    private static BlockingSuggestionProvider.Strings<Commander> fullmarkWorldSuggestions() {
+    private SuggestionProvider<Commander> fullmarkWorldSuggestions() {
+        return worldNameSuggestions(true);
+    }
+
+    private SuggestionProvider<Commander> worldNameSuggestions(boolean includeAll) {
         return (ctx, input) -> {
-            var worlds = new ArrayList<String>();
-            worlds.add("all");
-            Bukkit.getWorlds().stream().map(org.bukkit.World::getName).forEach(worlds::add);
-            return worlds;
+            var suggestions = new CompletableFuture<Iterable<? extends Suggestion>>();
+            Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                try {
+                    var names = new ArrayList<String>();
+                    if (includeAll) {
+                        names.add("all");
+                    }
+                    Bukkit.getWorlds().stream().map(World::getName).forEach(names::add);
+                    suggestions.complete(names.stream().map(Suggestion::suggestion).toList());
+                } catch (Throwable failure) {
+                    suggestions.completeExceptionally(failure);
+                }
+            });
+            return suggestions;
         };
     }
 
@@ -769,8 +782,8 @@ public final class ChunkReviveCommand {
                 String uuidStr = g.groupId().toString();
                 String displayName = StructureRegistry.displayName(g.structureId());
                 String details = "%s (%s)".formatted(displayName, g.rangeDisplay());
-                com.mojang.brigadier.Message tooltipMsg = MessageComponentSerializer.message()
-                    .serialize(Component.text(details));
+                com.mojang.brigadier.Message tooltipMsg = MessageComponentSerializer.message().serialize(Component.text(
+                    details));
                 list.add(TooltipSuggestion.suggestion(uuidStr, tooltipMsg));
             }
             return list;

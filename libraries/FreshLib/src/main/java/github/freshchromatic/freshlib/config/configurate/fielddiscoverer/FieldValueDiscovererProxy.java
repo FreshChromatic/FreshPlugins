@@ -7,12 +7,21 @@ import org.spongepowered.configurate.serialize.SerializationException;
 import org.spongepowered.configurate.util.CheckedFunction;
 import org.spongepowered.configurate.util.Types;
 
-import java.lang.reflect.*;
+import java.lang.reflect.AnnotatedType;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import static io.leangen.geantyref.GenericTypeReflector.*;
+import static io.leangen.geantyref.GenericTypeReflector.annotate;
+import static io.leangen.geantyref.GenericTypeReflector.erase;
+import static io.leangen.geantyref.GenericTypeReflector.getExactSuperType;
+import static io.leangen.geantyref.GenericTypeReflector.getFieldType;
 
 /**
  * Identical to Configurate's ObjectFieldDiscoverer except uses the type of the value instead of the fields type.
@@ -38,14 +47,12 @@ public class FieldValueDiscovererProxy implements FieldDiscoverer<Map<Field, Obj
     }, "Objects must have a zero-argument constructor to be able to create new instances", false);
 
     private final CheckedFunction<AnnotatedType, @Nullable Supplier<Object>, SerializationException> instanceFactory;
-    private final String instanceUnavailableErrorMessage;
-    private final boolean requiresInstanceCreation;
+    private final String                                                                             instanceUnavailableErrorMessage;
+    private final boolean                                                                            requiresInstanceCreation;
 
     FieldValueDiscovererProxy(
-            final CheckedFunction<AnnotatedType, @Nullable Supplier<Object>, SerializationException> instanceFactory,
-            final @Nullable String instanceUnavailableErrorMessage,
-            final boolean requiresInstanceCreation
-    ) {
+        final CheckedFunction<AnnotatedType, @Nullable Supplier<Object>, SerializationException> instanceFactory,
+        final @Nullable String instanceUnavailableErrorMessage, final boolean requiresInstanceCreation) {
         this.instanceFactory = instanceFactory;
         if (instanceUnavailableErrorMessage == null) {
             this.instanceUnavailableErrorMessage = "Unable to create instances for this type!";
@@ -57,7 +64,7 @@ public class FieldValueDiscovererProxy implements FieldDiscoverer<Map<Field, Obj
 
     @Override
     public <V> @Nullable InstanceFactory<Map<Field, Object>> discover(final AnnotatedType target,
-                                                                       final FieldCollector<Map<Field, Object>, V> collector) throws SerializationException {
+        final FieldCollector<Map<Field, Object>, V> collector) throws SerializationException {
         final Class<?> clazz = erase(target.getType());
         if (clazz.isInterface()) {
             throw new SerializationException(target.getType(), "ObjectMapper can only work with concrete types");
@@ -89,7 +96,8 @@ public class FieldValueDiscovererProxy implements FieldDiscoverer<Map<Field, Obj
             }
 
             @Override
-            public void complete(final Object instance, final Map<Field, Object> intermediate) throws SerializationException {
+            public void complete(final Object instance, final Map<Field, Object> intermediate)
+                throws SerializationException {
                 for (final Map.Entry<Field, Object> entry : intermediate.entrySet()) {
                     try {
                         // Handle implicit field initialization by detecting any existing information in the object
@@ -127,7 +135,8 @@ public class FieldValueDiscovererProxy implements FieldDiscoverer<Map<Field, Obj
         };
     }
 
-    private void collectFields(final AnnotatedType clazz, final FieldCollector<Map<Field, Object>, ?> fieldMaker, Object instanceForCollection) {
+    private void collectFields(final AnnotatedType clazz, final FieldCollector<Map<Field, Object>, ?> fieldMaker,
+        Object instanceForCollection) {
         for (final Field field : erase(clazz.getType()).getDeclaredFields()) {
             if ((field.getModifiers() & (Modifier.STATIC | Modifier.TRANSIENT)) != 0) {
                 continue;
@@ -144,16 +153,18 @@ public class FieldValueDiscovererProxy implements FieldDiscoverer<Map<Field, Obj
                         fieldType = annotate(type);
                     }
                 }
-            } catch (IllegalAccessException ignored) {}
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("Unable to read configuration field " + field, e);
+            }
 
-            fieldMaker.accept(field.getName(), fieldType, Types.combinedAnnotations(fieldType, field),
-                              (intermediate, val, implicitProvider) -> {
-                                  if (val != null) {
-                                      intermediate.put(field, val);
-                                  } else {
-                                      intermediate.put(field, new ImplicitProvider(implicitProvider));
-                                  }
-                              }, field::get);
+            fieldMaker.accept(field.getName(), fieldType, Types.combinedAnnotations(fieldType, field), (intermediate,
+                val, implicitProvider) -> {
+                    if (val != null) {
+                        intermediate.put(field, val);
+                    } else {
+                        intermediate.put(field, new ImplicitProvider(implicitProvider));
+                    }
+                }, field::get);
         }
     }
 

@@ -16,8 +16,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class MenuConfig {
-    private final JavaPlugin plugin;
-    private final File menuFolder;
+
+    private final JavaPlugin                     plugin;
+    private final File                           menuFolder;
     private final Map<String, YamlConfiguration> menuConfigs = new HashMap<>();
 
     public MenuConfig(JavaPlugin plugin) {
@@ -73,16 +74,22 @@ public class MenuConfig {
     public String[] getLayout(String menuKey) {
         YamlConfiguration config = getConfig(menuKey);
         String layoutStr = config.getString("layout", "");
-        if (!layoutStr.isBlank()) return layoutStr.split("\n");
+        if (!layoutStr.isBlank()) {
+            return layoutStr.split("\n");
+        }
 
         ConfigurationSection items = config.getConfigurationSection("items");
-        if (items == null) return layoutStr.split("\n");
+        if (items == null) {
+            return layoutStr.split("\n");
+        }
 
         Map<Character, List<Integer>> configuredSlots = new HashMap<>();
         int highestSlot = -1;
         for (String key : items.getKeys(false)) {
             ConfigurationSection item = items.getConfigurationSection(key);
-            if (item == null || !item.contains("slots")) continue;
+            if (item == null || !item.contains("slots")) {
+                continue;
+            }
             if (key.length() != 1) {
                 plugin.getLogger().warning("[FreshLib] slots requires a single-character item key: \"" + key + "\"");
                 continue;
@@ -94,13 +101,19 @@ public class MenuConfig {
                 highestSlot = Math.max(highestSlot, slots.stream().mapToInt(Integer::intValue).max().orElse(-1));
             }
         }
-        if (configuredSlots.isEmpty()) return layoutStr.split("\n");
+        if (configuredSlots.isEmpty()) {
+            return layoutStr.split("\n");
+        }
 
         int configuredSize = config.getInt("size", config.getInt("rows", 0) * 9);
         int requiredSize = ((highestSlot + 9) / 9) * 9;
         int size = Math.max(configuredSize, requiredSize);
-        if (size <= 0) size = 9;
-        if (size % 9 != 0) size = ((size + 8) / 9) * 9;
+        if (size <= 0) {
+            size = 9;
+        }
+        if (size % 9 != 0) {
+            size = ((size + 8) / 9) * 9;
+        }
 
         char[] layout = new char[size];
         Arrays.fill(layout, ' ');
@@ -108,7 +121,7 @@ public class MenuConfig {
             for (int slot : entry.getValue()) {
                 if (slot < 0 || slot >= size) {
                     plugin.getLogger().warning("[FreshLib] Slot " + slot + " is outside menu size " + size
-                            + " for item \"" + entry.getKey() + "\"");
+                        + " for item \"" + entry.getKey() + "\"");
                     continue;
                 }
                 layout[slot] = entry.getKey();
@@ -125,9 +138,7 @@ public class MenuConfig {
     private List<Integer> parseSlots(ConfigurationSection section, String path) {
         List<Integer> slots = new ArrayList<>();
         Object raw = section.get("slots");
-        List<?> values = raw instanceof List<?> list
-                ? list
-                : Arrays.asList(String.valueOf(raw).split(","));
+        List<?> values = raw instanceof List<?> list ? list : Arrays.asList(String.valueOf(raw).split(","));
 
         for (Object value : values) {
             try {
@@ -144,10 +155,11 @@ public class MenuConfig {
     }
 
     public Component parse(String text) {
-        if (text == null) return Component.empty();
+        if (text == null) {
+            return Component.empty();
+        }
         try {
-            return Components.miniMessage(text)
-                    .decoration(TextDecoration.ITALIC, false);
+            return Components.miniMessage(text).decoration(TextDecoration.ITALIC, false);
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to parse mini-message: " + text);
             return Component.text(text).decoration(TextDecoration.ITALIC, false);
@@ -155,7 +167,9 @@ public class MenuConfig {
     }
 
     public List<Component> parseLore(List<String> lore) {
-        if (lore == null) return List.of();
+        if (lore == null) {
+            return List.of();
+        }
         return lore.stream().map(this::parse).collect(Collectors.toList());
     }
 }

@@ -21,6 +21,7 @@ import java.util.Collection;
  * its terrain has been written and applied.</p>
  */
 final class EndPodiumRestorer {
+
     private static final int MIN_PODIUM_CHUNK = -1;
     private static final int MAX_PODIUM_CHUNK = 0;
 
@@ -31,31 +32,37 @@ final class EndPodiumRestorer {
     }
 
     void restoreIfAffected(World world, Collection<MarkedChunk> chunks) {
-        if (world.getEnvironment() != World.Environment.THE_END || !touchesPodium(chunks)) return;
+        if (world.getEnvironment() != World.Environment.THE_END || !touchesPodium(chunks)) {
+            return;
+        }
 
         // DragonBattle and world blocks must be accessed on the End's owning region thread.
         Scheduler.runTask(plugin, () -> restore(world), new Location(world, 0, 64, 0));
     }
 
     static boolean touchesPodium(Collection<MarkedChunk> chunks) {
-        return chunks.stream().anyMatch(chunk -> chunk.cx() >= MIN_PODIUM_CHUNK
-            && chunk.cx() <= MAX_PODIUM_CHUNK
-            && chunk.cz() >= MIN_PODIUM_CHUNK
-            && chunk.cz() <= MAX_PODIUM_CHUNK);
+        return chunks.stream().anyMatch(chunk -> chunk.cx() >= MIN_PODIUM_CHUNK && chunk.cx() <= MAX_PODIUM_CHUNK
+            && chunk.cz() >= MIN_PODIUM_CHUNK && chunk.cz() <= MAX_PODIUM_CHUNK);
     }
 
     private static void restore(World world) {
         DragonBattle battle = world.getEnderDragonBattle();
-        if (battle == null) return;
+        if (battle == null) {
+            return;
+        }
 
         boolean active = battle.hasBeenPreviouslyKilled();
-        if (battle.generateEndPortal(active)) return;
+        if (battle.generateEndPortal(active)) {
+            return;
+        }
 
         // Paper deliberately refuses generateEndPortal once the fight has a cached portal location,
         // even if regeneration just removed its blocks. Reapply the same EndPodiumFeature layout at
         // that authoritative location instead of resetting any dragon-fight saved state.
         Location origin = battle.getEndPortalLocation();
-        if (origin != null) placePodium(world, origin.getBlockX(), origin.getBlockY(), origin.getBlockZ(), active);
+        if (origin != null) {
+            placePodium(world, origin.getBlockX(), origin.getBlockY(), origin.getBlockZ(), active);
+        }
     }
 
     private static void placePodium(World world, int originX, int originY, int originZ, boolean active) {
@@ -64,7 +71,9 @@ final class EndPodiumRestorer {
                 for (int z = originZ - 4; z <= originZ + 4; z++) {
                     double distanceSquared = squaredDistance(x, z, originX, originZ);
                     boolean insidePortal = distanceSquared < 2.5 * 2.5;
-                    if (!insidePortal && distanceSquared >= 3.5 * 3.5) continue;
+                    if (!insidePortal && distanceSquared >= 3.5 * 3.5) {
+                        continue;
+                    }
 
                     Block block = world.getBlockAt(x, y, z);
                     if (y < originY) {
@@ -80,8 +89,10 @@ final class EndPodiumRestorer {
             }
         }
 
-        for (int y = 0; y < 4; y++) set(world.getBlockAt(originX, originY + y, originZ), Material.BEDROCK);
-        for (BlockFace face : new BlockFace[] {BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST}) {
+        for (int y = 0; y < 4; y++) {
+            set(world.getBlockAt(originX, originY + y, originZ), Material.BEDROCK);
+        }
+        for (BlockFace face : new BlockFace[] { BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST }) {
             Block torch = world.getBlockAt(originX + face.getModX(), originY + 2, originZ + face.getModZ());
             torch.setType(Material.WALL_TORCH, false);
             Directional data = (Directional) torch.getBlockData();
@@ -97,6 +108,8 @@ final class EndPodiumRestorer {
     }
 
     private static void set(Block block, Material material) {
-        if (block.getType() != material) block.setType(material, false);
+        if (block.getType() != material) {
+            block.setType(material, false);
+        }
     }
 }

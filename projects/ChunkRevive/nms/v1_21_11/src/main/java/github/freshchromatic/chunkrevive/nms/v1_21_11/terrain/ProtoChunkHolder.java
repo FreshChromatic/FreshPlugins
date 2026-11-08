@@ -24,28 +24,41 @@ final class ProtoChunkHolder extends GenerationChunkHolder {
     }
 
     @Override
-    public ChunkAccess getChunkIfPresentUnchecked(ChunkStatus status) { return chunk; }
+    public ChunkAccess getChunkIfPresentUnchecked(ChunkStatus status) {
+        return chunk;
+    }
 
     @Override
-    public ChunkAccess getChunkIfPresent(ChunkStatus status) { return chunk; }
+    public ChunkAccess getChunkIfPresent(ChunkStatus status) {
+        return chunk;
+    }
 
     @Override
-    public ChunkAccess getLatestChunk() { return chunk; }
+    public ChunkAccess getLatestChunk() {
+        return chunk;
+    }
 
     @Override
-    public ChunkStatus getPersistedStatus() { return chunk.getPersistedStatus(); }
+    public ChunkStatus getPersistedStatus() {
+        return chunk.getPersistedStatus();
+    }
 
     @Override
-    public FullChunkStatus getFullStatus() { return FullChunkStatus.INACCESSIBLE; }
+    public FullChunkStatus getFullStatus() {
+        return FullChunkStatus.INACCESSIBLE;
+    }
 
     @Override
-    protected void addSaveDependency(CompletableFuture<?> future) {}
+    protected void addSaveDependency(CompletableFuture<?> future) {
+    }
 
     @Override
-    public int getTicketLevel() { return 0; }
+    public int getTicketLevel() {
+        return 0;
+    }
 
     @Override
-    public int getQueueLevel() { return 0; }
+    public int getQueueLevel() {
+        return 0;
+    }
 }
-
-

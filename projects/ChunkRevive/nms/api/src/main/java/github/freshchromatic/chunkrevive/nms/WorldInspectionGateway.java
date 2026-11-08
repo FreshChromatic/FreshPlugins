@@ -7,6 +7,7 @@ import java.util.function.Predicate;
 
 /** Version-specific access to live world-generation metadata. */
 public interface WorldInspectionGateway {
-    List<StructureInfo> detectStructures(
-        World world, int blockX, int blockZ, int radiusChunks, Predicate<String> idFilter);
+
+    List<StructureInfo> detectStructures(World world, int blockX, int blockZ, int radiusChunks,
+        Predicate<String> idFilter);
 }

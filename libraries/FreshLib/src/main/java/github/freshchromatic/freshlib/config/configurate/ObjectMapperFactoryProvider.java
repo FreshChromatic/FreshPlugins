@@ -35,11 +35,11 @@ public final class ObjectMapperFactoryProvider {
         return in;
     };
 
-    private static final Comparator<OrderedFieldDiscovererProxy.FieldCollectorData<Object, ?>> FIELD_ORDER =
-            Comparator.comparingInt(data -> {
-                Order order = data.annotations().getAnnotation(Order.class);
-                return order != null ? order.value() : 0;
-            });
+    private static final Comparator<OrderedFieldDiscovererProxy.FieldCollectorData<Object, ?>> FIELD_ORDER = Comparator.comparingInt(
+        data -> {
+            Order order = data.annotations().getAnnotation(Order.class);
+            return order != null ? order.value() : 0;
+        });
 
     private ObjectMapperFactoryProvider() {
     }
@@ -55,15 +55,15 @@ public final class ObjectMapperFactoryProvider {
      */
     public static ObjectMapper.Factory objectMapperFactory() {
         return ObjectMapper.factoryBuilder()
-                .defaultNamingScheme(NAMING_SCHEME)
-                .addDiscoverer(new OrderedFieldDiscovererProxy<>(
-                        (FieldDiscoverer<Object>) (Object) FieldValueDiscovererProxy.EMPTY_CONSTRUCTOR_INSTANCE,
-                        FIELD_ORDER))
-                .addDiscoverer(new OrderedFieldDiscovererProxy<>(
-                        (FieldDiscoverer<Object>) FieldDiscoverer.record(),
-                        FIELD_ORDER))
-                .addProcessor(Comment.class, Processor.comments())
-                .build();
+            .defaultNamingScheme(NAMING_SCHEME)
+            .addDiscoverer(
+            new OrderedFieldDiscovererProxy<>(
+                (FieldDiscoverer<Object>) (Object) FieldValueDiscovererProxy.EMPTY_CONSTRUCTOR_INSTANCE,
+                FIELD_ORDER))
+            .addDiscoverer(new OrderedFieldDiscovererProxy<>(
+                    (FieldDiscoverer<Object>) FieldDiscoverer.record(), FIELD_ORDER))
+            .addProcessor(Comment.class, Processor.comments())
+            .build();
     }
 
     /**
@@ -81,20 +81,18 @@ public final class ObjectMapperFactoryProvider {
      */
     public static ObjectMapper.Factory cleanObjectMapperFactory(boolean isGeneratingDefaults) {
         ObjectMapper.Factory.Builder builder = ObjectMapper.factoryBuilder()
-                .defaultNamingScheme(NAMING_SCHEME)
-                .addDiscoverer(new OrderedFieldDiscovererProxy<>(
-                        (FieldDiscoverer<Object>) (Object) FieldValueDiscovererProxy.EMPTY_CONSTRUCTOR_INSTANCE,
-                        FIELD_ORDER))
-                .addDiscoverer(new OrderedFieldDiscovererProxy<>(
-                        (FieldDiscoverer<Object>) FieldDiscoverer.record(),
-                        FIELD_ORDER));
+            .defaultNamingScheme(NAMING_SCHEME)
+            .addDiscoverer(new OrderedFieldDiscovererProxy<>(
+                (FieldDiscoverer<Object>) (Object) FieldValueDiscovererProxy.EMPTY_CONSTRUCTOR_INSTANCE,
+                FIELD_ORDER))
+            .addDiscoverer(new OrderedFieldDiscovererProxy<>(
+                    (FieldDiscoverer<Object>) FieldDiscoverer.record(), FIELD_ORDER));
 
         if (!isGeneratingDefaults) {
             builder.addProcessor(DefaultOnly.class, (annotation, value) -> null);
         }
 
-        return builder.addProcessor(Comment.class, Processor.comments())
-                .build();
+        return builder.addProcessor(Comment.class, Processor.comments()).build();
     }
 
     /**

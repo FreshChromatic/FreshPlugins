@@ -4,7 +4,7 @@ import github.freshchromatic.freshlib.util.Logging;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,12 +29,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class EnvironmentConfigManager {
 
     public enum Environment {
-        DEV("dev", "development"),
-        TEST("test", "testing"),
-        STAGING("staging", "stage"),
-        PROD("prod", "production");
 
-        private final String id;
+        DEV("dev", "development"), TEST("test", "testing"), STAGING("staging", "stage"), PROD("prod", "production");
+
+        private final String   id;
         private final String[] aliases;
 
         Environment(String id, String... aliases) {
@@ -42,29 +40,39 @@ public class EnvironmentConfigManager {
             this.aliases = aliases;
         }
 
-        public String getId() { return id; }
+        public String getId() {
+            return id;
+        }
 
         public boolean matches(String value) {
-            if (id.equalsIgnoreCase(value)) return true;
+            if (id.equalsIgnoreCase(value)) {
+                return true;
+            }
             for (String alias : aliases) {
-                if (alias.equalsIgnoreCase(value)) return true;
+                if (alias.equalsIgnoreCase(value)) {
+                    return true;
+                }
             }
             return false;
         }
 
         public static Environment fromString(String value) {
-            if (value == null || value.isEmpty()) return PROD;
+            if (value == null || value.isEmpty()) {
+                return PROD;
+            }
             for (Environment env : values()) {
-                if (env.matches(value)) return env;
+                if (env.matches(value)) {
+                    return env;
+                }
             }
             Logging.logger().warning("Unknown environment: '" + value + "', defaulting to production");
             return PROD;
         }
     }
 
-    private static Environment currentEnvironment = Environment.PROD;
+    private static Environment               currentEnvironment   = Environment.PROD;
     private static final Map<String, String> environmentVariables = new ConcurrentHashMap<>();
-    private static final List<String> ACTIVE_PROFILES = Arrays.asList("default");
+    private static final List<String>        ACTIVE_PROFILES      = new ArrayList<>(List.of("default"));
 
     private EnvironmentConfigManager() {
     }
@@ -118,8 +126,7 @@ public class EnvironmentConfigManager {
      * Checks if a profile is currently active.
      */
     public static boolean isProfileActive(String profile) {
-        return ACTIVE_PROFILES.contains(profile.toLowerCase(Locale.ROOT))
-                || ACTIVE_PROFILES.contains(currentEnvironment.getId());
+        return ACTIVE_PROFILES.contains(profile.toLowerCase(Locale.ROOT)) || currentEnvironment.matches(profile);
     }
 
     /**
@@ -141,13 +148,19 @@ public class EnvironmentConfigManager {
      */
     public static String getVariable(String key) {
         String value = environmentVariables.get(key);
-        if (value != null) return value;
+        if (value != null) {
+            return value;
+        }
 
         value = System.getenv(key);
-        if (value != null) return value;
+        if (value != null) {
+            return value;
+        }
 
         value = System.getProperty(key);
-        if (value != null) return value;
+        if (value != null) {
+            return value;
+        }
 
         return null;
     }
@@ -161,22 +174,27 @@ public class EnvironmentConfigManager {
      * @return resolved path
      */
     public static Path resolveConfigPath(Path basePath, String fileName) {
-        Path envSpecificPath = basePath.resolve(
-                currentEnvironment.getId() + "-" + fileName.replace(".yml", "") + ".yml"
-        );
+        return resolveConfigPath(basePath, new ConfigFileName(fileName));
+    }
+
+    public static Path resolveConfigPath(Path basePath, ConfigFileName fileName) {
+        String name = fileName.value();
+        Path envSpecificPath = basePath.resolve(currentEnvironment.getId() + "-" + name.replace(".yml", "") + ".yml");
 
         if (Files.exists(envSpecificPath)) {
             return envSpecificPath;
         }
 
-        return basePath.resolve(fileName);
+        return basePath.resolve(name);
     }
 
     /**
      * Resolves environment variables in a string using ${VAR} syntax.
      */
     public static String resolveEnvironmentVariables(String input) {
-        if (input == null || !input.contains("${")) return input;
+        if (input == null || !input.contains("${")) {
+            return input;
+        }
 
         StringBuilder result = new StringBuilder();
         int i = 0;

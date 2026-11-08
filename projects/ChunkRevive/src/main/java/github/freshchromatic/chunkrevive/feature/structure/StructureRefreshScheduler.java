@@ -1,5 +1,6 @@
 package github.freshchromatic.chunkrevive.feature.structure;
 
+import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.config.Messages;
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
@@ -16,6 +17,8 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Periodically refreshes structure groups whose refresh period has elapsed. */
 public final class StructureRefreshScheduler {
@@ -29,12 +32,13 @@ public final class StructureRefreshScheduler {
     private PluginConfig config;
     private Messages     messages;
 
-    private ScheduledTask task;
+    private ScheduledTask    task;
     private volatile boolean checking;
+    private final AtomicLong generation = new AtomicLong();
 
     public StructureRefreshScheduler(Plugin plugin, PluginConfig config, Messages messages,
-                                      StructureRegistry structureRegistry, MarkRegistry markRegistry,
-                                      WorldAccessPolicy worldAccessPolicy, ProtectedMarkExecutor protectedMarks) {
+        StructureRegistry structureRegistry, MarkRegistry markRegistry, WorldAccessPolicy worldAccessPolicy,
+        ProtectedMarkExecutor protectedMarks) {
         this.plugin = plugin;
         this.config = config;
         this.messages = messages;
@@ -54,28 +58,43 @@ public final class StructureRefreshScheduler {
 
     public void start() {
         stop();
-        if (!config.structure.enabled || !config.structure.refresh.enabled) return;
+        if (!config.structure.enabled || !config.structure.refresh.enabled) {
+            return;
+        }
         long interval = Math.max(20L, config.structure.refresh.checkIntervalTicks);
-        task = Scheduler.runTaskTimer(plugin, this::tick, interval, interval);
+        long scheduledGeneration = generation.get();
+        task = Scheduler.runTaskTimer(plugin, () -> tick(scheduledGeneration), interval, interval);
     }
 
     public void stop() {
+        generation.incrementAndGet();
         if (task != null) {
             task.cancel();
             task = null;
         }
     }
 
-    private void tick() {
-        if (!config.structure.enabled || !config.structure.refresh.enabled) return;
-        if (checking || markRegistry.getRegenerationQueue().isRunning()) return;
+    private void tick(long scheduledGeneration) {
+        if (scheduledGeneration != generation.get()) {
+            return;
+        }
+        if (!config.structure.enabled || !config.structure.refresh.enabled) {
+            return;
+        }
+        if (checking || markRegistry.getRegenerationQueue().isRunning()) {
+            return;
+        }
         long now = System.currentTimeMillis();
         long intervalTicks = Math.max(20L, config.structure.refresh.checkIntervalTicks);
 
         List<MarkedChunk> dueChunks = new ArrayList<>();
         for (StructureGroup group : List.copyOf(structureRegistry.getAllGroups())) {
-            if (!config.structure.refresh.isTracked(group.structureId())) continue;
-            if (group.nextRefreshAt() <= 0 || group.nextRefreshAt() > now) continue;
+            if (!config.structure.refresh.isTracked(group.structureId())) {
+                continue;
+            }
+            if (group.nextRefreshAt() <= 0 || group.nextRefreshAt() > now) {
+                continue;
+            }
 
             if (!worldAccessPolicy.isAllowed(group.world(), WorldAccessPolicy.Scope.STRUCTURE_REFRESH)) {
                 if (config.enableDebugLogs) {
@@ -88,54 +107,90 @@ public final class StructureRefreshScheduler {
             if (group.blocked()) {
                 adminBroadcastAudience().sendMessage(messages.structure.refreshBlocked.withPlaceholders(
                     Components.placeholder("structure_name", StructureRegistry.displayName(group.structureId()))));
-                structureRegistry.postponeRefresh(group.groupId(), intervalTicks);
+                postponeRefresh(group.groupId(), intervalTicks);
                 continue;
             }
 
-            List<int[]> effective = structureRegistry.resolveEffectiveChunks(group.world(),
-                group.minChunkX(), group.maxChunkX(), group.minChunkZ(), group.maxChunkZ());
+            List<ChunkCoordinate> effective = structureRegistry.resolveEffectiveChunks(group.world(), group.minChunkX(),
+                group.maxChunkX(), group.minChunkZ(), group.maxChunkZ());
             if (effective == null || effective.isEmpty()) {
-                structureRegistry.postponeRefresh(group.groupId(), intervalTicks);
+                postponeRefresh(group.groupId(), intervalTicks);
                 continue;
             }
 
             List<MarkedChunk> groupChunks = new ArrayList<>();
-            for (int[] coord : effective) {
-                groupChunks.add(new MarkedChunk(group.world(), coord[0], coord[1], group.groupId(), now, group.groupId()));
+            for (ChunkCoordinate coord : effective) {
+                groupChunks.add(new MarkedChunk(group.world(), coord.x(), coord.z(), group.groupId(), now,
+                    group.groupId()));
             }
             dueChunks.addAll(groupChunks);
         }
 
-        if (dueChunks.isEmpty()) return;
+        if (dueChunks.isEmpty()) {
+            return;
+        }
         checking = true;
-        protectedMarks.markBatch(dueChunks, false).whenComplete((outcome, failure) -> {
+        protectedMarks.markBatch(dueChunks).whenComplete((outcome, failure) -> {
             checking = false;
+            if (scheduledGeneration != generation.get()) {
+                return;
+            }
             if (failure != null) {
                 plugin.getLogger().warning("Structure refresh protection check failed: " + failure.getMessage());
                 return;
             }
             if (task == null || !config.structure.enabled || !config.structure.refresh.enabled
-                    || outcome.eligible().isEmpty() || markRegistry.getRegenerationQueue().isRunning()) return;
-            for (StructureGroup group : List.copyOf(structureRegistry.getAllGroups())) {
-                long count = outcome.eligible().stream()
-                    .filter(chunk -> group.groupId().equals(chunk.structureGroupId())).count();
-                if (count > 0) {
-                    adminBroadcastAudience().sendMessage(messages.structure.refreshStart.withPlaceholders(
-                        Components.placeholder("structure_name", StructureRegistry.displayName(group.structureId())),
-                        Components.placeholder("count", String.valueOf(count))));
-                }
+                || outcome.eligible().isEmpty() || markRegistry.getRegenerationQueue().isRunning()) {
+                return;
             }
-            markRegistry.getRegenerationQueue().start(outcome.eligible(), adminBroadcastAudience(),
-                batch -> markRegistry.onChunksRegenComplete(batch));
+            List<StructureGroup> refreshing = List.copyOf(structureRegistry.getAllGroups())
+                .stream()
+                .filter(
+                group ->
+                    outcome.eligible()
+                        .stream()
+                        .anyMatch(chunk -> group.groupId().equals(chunk.structureGroupId())))
+                .toList();
+            Audience audience = adminBroadcastAudience();
+            boolean started = markRegistry.getRegenerationQueue().start(outcome.eligible(), audience,
+                batch -> markRegistry.onChunksRegenComplete(batch, task -> Bukkit.getGlobalRegionScheduler().execute(
+                    plugin, task)).whenComplete((ignored, persistenceFailure) -> {
+                        if (persistenceFailure != null) {
+                            plugin.getLogger().warning("Failed to persist structure or mark state after regeneration: "
+                                + persistenceFailure.getMessage());
+                        }
+                    }));
+            if (!started) {
+                refreshing.forEach(group -> postponeRefresh(group.groupId(), intervalTicks));
+                return;
+            }
+            for (StructureGroup group : refreshing) {
+                long count = outcome.eligible()
+                    .stream()
+                    .filter(chunk -> group.groupId().equals(chunk.structureGroupId()))
+                    .count();
+                audience.sendMessage(messages.structure.refreshStart.withPlaceholders(Components.placeholder(
+                    "structure_name", StructureRegistry.displayName(group.structureId())), Components.placeholder(
+                        "count", String.valueOf(count))));
+            }
         });
     }
 
     private Audience adminBroadcastAudience() {
         List<Audience> admins = new ArrayList<>();
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (p.hasPermission("chunkrevive.admin")) admins.add(p);
+            if (p.hasPermission("chunkrevive.admin")) {
+                admins.add(p);
+            }
         }
         admins.add(Bukkit.getConsoleSender());
         return Audience.audience(admins);
+    }
+
+    private void postponeRefresh(UUID groupId, long intervalTicks) {
+        structureRegistry.postponeRefresh(groupId, intervalTicks).exceptionally(failure -> {
+            plugin.getLogger().warning("Failed to postpone structure refresh: " + failure.getMessage());
+            return null;
+        });
     }
 }

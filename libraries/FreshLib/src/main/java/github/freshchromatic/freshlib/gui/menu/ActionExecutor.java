@@ -4,6 +4,7 @@ import github.freshchromatic.freshlib.gui.inventorygui.GuiElement;
 
 @FunctionalInterface
 public interface ActionExecutor {
+
     /**
      * Executes an action triggered by a GUI click.
      *

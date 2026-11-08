@@ -5,8 +5,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public abstract class Menu {
-    protected final JavaPlugin plugin;
-    protected final String menuKey;
+
+    protected final JavaPlugin   plugin;
+    protected final String       menuKey;
     protected final InventoryGui gui;
 
     public Menu(JavaPlugin plugin, MenuConfig menuConfig, String menuKey) {

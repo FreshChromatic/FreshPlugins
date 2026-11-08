@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SpatialBatchPlannerTest {
+
     @Test
     void boundsHugeLogicalGroupsAndPreservesEveryTarget() {
         List<MarkedChunk> group = new ArrayList<>();
@@ -35,8 +36,8 @@ class SpatialBatchPlannerTest {
 
     @Test
     void keepsNegativeCoordinatesInsideStableFloorDivTiles() {
-        List<MarkedChunk> group = List.of(
-            marked(-17, -17), marked(-16, -16), marked(-1, -1), marked(0, 0), marked(15, 15), marked(16, 16));
+        List<MarkedChunk> group = List.of(marked(-17, -17), marked(-16, -16), marked(-1, -1), marked(0, 0), marked(15,
+            15), marked(16, 16));
 
         List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(List.of(group), 128, 16);
 
@@ -48,7 +49,9 @@ class SpatialBatchPlannerTest {
     void keepsCompactStructureSizedGroupInOneDagAcrossGridBoundary() {
         List<MarkedChunk> group = new ArrayList<>();
         for (int x = 8; x < 19; x++) {
-            for (int z = 8; z < 17; z++) group.add(marked(x, z));
+            for (int z = 8; z < 17; z++) {
+                group.add(marked(x, z));
+            }
         }
 
         List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(List.of(group), 128, 16);
@@ -63,13 +66,12 @@ class SpatialBatchPlannerTest {
         List<MarkedChunk> structure = new ArrayList<>();
         for (int x = -16; x < 0; x++) {
             for (int z = -15; z < 0; z++) {
-                structure.add(new MarkedChunk(
-                    "world", x, z, new java.util.UUID(0L, 1L), 0L, structureId, false));
+                structure.add(new MarkedChunk("world", x, z, new java.util.UUID(0L, 1L), 0L, structureId, false));
             }
         }
 
-        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(
-            List.of(structure), 128, 16, PluginConfig.Regen.WorkTileMode.LOGICAL, false, true);
+        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(List.of(structure), 128, 16,
+            PluginConfig.Regen.WorkTileMode.LOGICAL, false, true);
 
         assertEquals(1, tiles.size());
         assertEquals(240, tiles.getFirst().size());
@@ -81,13 +83,12 @@ class SpatialBatchPlannerTest {
         List<MarkedChunk> structure = new ArrayList<>();
         for (int x = -20; x < 20; x++) {
             for (int z = -4; z < 4; z++) {
-                structure.add(new MarkedChunk(
-                    "world", x, z, new java.util.UUID(0L, 1L), 0L, structureId, false));
+                structure.add(new MarkedChunk("world", x, z, new java.util.UUID(0L, 1L), 0L, structureId, false));
             }
         }
 
-        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(
-            List.of(structure), 128, 16, PluginConfig.Regen.WorkTileMode.MCA, false, true);
+        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(List.of(structure), 128, 16,
+            PluginConfig.Regen.WorkTileMode.MCA, false, true);
 
         assertEquals(1, tiles.size());
         assertEquals(320, tiles.getFirst().size());
@@ -102,8 +103,8 @@ class SpatialBatchPlannerTest {
             (index < 80 ? first : second).add(chunk);
         }
 
-        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(
-            List.of(first, second), 128, 16, PluginConfig.Regen.WorkTileMode.MCA, true);
+        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(List.of(first, second), 128, 16,
+            PluginConfig.Regen.WorkTileMode.MCA, true);
 
         assertEquals(List.of(97, 96), tiles.stream().map(List::size).toList());
         assertEquals(193, tiles.stream().mapToInt(List::size).sum());
@@ -113,11 +114,13 @@ class SpatialBatchPlannerTest {
     void fixedSizeBalancesAFullMcaWithoutExceedingCap() {
         List<MarkedChunk> region = new ArrayList<>();
         for (int x = 0; x < 32; x++) {
-            for (int z = 0; z < 32; z++) region.add(marked(x, z));
+            for (int z = 0; z < 32; z++) {
+                region.add(marked(x, z));
+            }
         }
 
-        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(
-            List.of(region), 192, 16, PluginConfig.Regen.WorkTileMode.MCA, true);
+        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(List.of(region), 192, 16,
+            PluginConfig.Regen.WorkTileMode.MCA, true);
 
         assertEquals(6, tiles.size());
         assertEquals(1024, tiles.stream().mapToInt(List::size).sum());
@@ -128,8 +131,8 @@ class SpatialBatchPlannerTest {
     void mcaModeUsesFloorDivisionAtNegativeRegionBoundaries() {
         List<MarkedChunk> targets = List.of(marked(-33, 0), marked(-32, 0), marked(-1, 0), marked(0, 0));
 
-        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(
-            List.of(targets), 128, 16, PluginConfig.Regen.WorkTileMode.MCA, true);
+        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(List.of(targets), 128, 16,
+            PluginConfig.Regen.WorkTileMode.MCA, true);
 
         assertEquals(3, tiles.size());
         assertEquals(List.of(1, 2, 1), tiles.stream().map(List::size).toList());
@@ -138,10 +141,12 @@ class SpatialBatchPlannerTest {
     @Test
     void nonFixedMcaModeRetainsCapThenRemainderBehavior() {
         List<MarkedChunk> targets = new ArrayList<>();
-        for (int index = 0; index < 193; index++) targets.add(marked(index / 32, index % 32));
+        for (int index = 0; index < 193; index++) {
+            targets.add(marked(index / 32, index % 32));
+        }
 
-        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(
-            List.of(targets), 128, 16, PluginConfig.Regen.WorkTileMode.MCA, false);
+        List<List<MarkedChunk>> tiles = SpatialBatchPlanner.split(List.of(targets), 128, 16,
+            PluginConfig.Regen.WorkTileMode.MCA, false);
 
         assertEquals(List.of(128, 65), tiles.stream().map(List::size).toList());
     }

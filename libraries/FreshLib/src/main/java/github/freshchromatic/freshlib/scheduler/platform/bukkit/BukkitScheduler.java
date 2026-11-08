@@ -138,7 +138,8 @@ public class BukkitScheduler implements PlatformScheduler {
     }
 
     @Override
-    public BukkitScheduledTask runTaskTimer(Plugin plugin, Runnable task, Runnable retired, long delay, long period, Entity entity) {
+    public BukkitScheduledTask runTaskTimer(Plugin plugin, Runnable task, Runnable retired, long delay, long period,
+        Entity entity) {
         return runTaskTimer(plugin, task, delay, period);
     }
 
@@ -178,12 +179,14 @@ public class BukkitScheduler implements PlatformScheduler {
     }
 
     @Override
-    public BukkitScheduledTask runTaskLater(Plugin plugin, Runnable task, long delay, World world, int chunkX, int chunkZ) {
+    public BukkitScheduledTask runTaskLater(Plugin plugin, Runnable task, long delay, World world, int chunkX,
+        int chunkZ) {
         return runTaskLater(plugin, task, delay);
     }
 
     @Override
-    public BukkitScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period, World world, int chunkX, int chunkZ) {
+    public BukkitScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period, World world,
+        int chunkX, int chunkZ) {
         return runTaskTimer(plugin, task, delay, period);
     }
 

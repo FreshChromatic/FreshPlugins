@@ -1,5 +1,7 @@
 package github.freshchromatic.chunkrevive.nms.v1_21_11.terrain;
 
+import github.freshchromatic.chunkrevive.nms.ChunkArea;
+
 import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.nms.TerrainGateway;
 import github.freshchromatic.chunkrevive.nms.TerrainSettings;
@@ -14,6 +16,7 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 public final class V1_21_11TerrainGateway implements TerrainGateway {
+
     @Override
     public void initialize(JavaPlugin plugin) {
         V1_21_11TerrainEngine.init(plugin);
@@ -31,11 +34,9 @@ public final class V1_21_11TerrainGateway implements TerrainGateway {
 
     @Override
     public CompletableFuture<Void> generate(World world, Collection<ChunkCoordinate> chunks, long seed,
-                                            IntConsumer progress, Consumer<String> stage,
-                                            BooleanSupplier cancelled, int[] extraContextBounds) {
+        IntConsumer progress, Consumer<String> stage, BooleanSupplier cancelled, ChunkArea extraContextBounds) {
         var positions = chunks.stream().map(chunk -> new ChunkPos(chunk.x(), chunk.z())).toList();
-        return V1_21_11TerrainEngine.generate(
-            world, positions, seed, progress, stage, cancelled, extraContextBounds);
+        return V1_21_11TerrainEngine.generate(world, positions, seed, progress, stage, cancelled, extraContextBounds);
     }
 
     @Override
@@ -63,4 +64,3 @@ public final class V1_21_11TerrainGateway implements TerrainGateway {
         V1_21_11TerrainEngine.shutdownPool();
     }
 }
-

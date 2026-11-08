@@ -9,6 +9,7 @@ package github.freshchromatic.chunkrevive.nms.v1_21_11.terrain;
  * preserve that distinction even though it reads target NBT to retain structure metadata.
  */
 final class BlendingAnchorPolicy {
+
     /**
      * Blender scans seven chunks from each BIOMES/NOISE center for height and biome samples.
      * ChunkRevive generates biome dependencies three chunks from a regeneration target (two
@@ -17,16 +18,15 @@ final class BlendingAnchorPolicy {
      */
     static final int OLD_NOISE_DISK_CONTEXT_RADIUS = 10;
 
-    private BlendingAnchorPolicy() {}
+    private BlendingAnchorPolicy() {
+    }
 
     static boolean preserveHistoricalTerrainMetadata(boolean regenerationTarget) {
         return !regenerationTarget;
     }
 
     static int requiredDiskContextRadius(int normalContextRadius, boolean oldNoiseAround) {
-        return oldNoiseAround
-            ? Math.max(normalContextRadius, OLD_NOISE_DISK_CONTEXT_RADIUS)
-            : normalContextRadius;
+        return oldNoiseAround ? Math.max(normalContextRadius, OLD_NOISE_DISK_CONTEXT_RADIUS) : normalContextRadius;
     }
 
     static boolean mayUseContextFreeCarverCache(boolean oldNoiseAround) {

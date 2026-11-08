@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 public final class SpigotEntityIdProvider implements EntityIdProvider {
 
     private final Platform<JavaPlugin> platform;
-    private final Supplier<Integer> entityIdSupplier;
+    private final Supplier<Integer>    entityIdSupplier;
 
     public SpigotEntityIdProvider(final @NotNull Platform<JavaPlugin> platform) {
         this.platform = platform;
@@ -91,8 +91,8 @@ public final class SpigotEntityIdProvider implements EntityIdProvider {
     }
 
     private Supplier<Integer> resolveAtomicSupplier(final Class<?> entityClass) {
-        final Field entityAtomicField = getStaticFieldOfType(entityClass, AtomicInteger.class,
-                "entityCount", "d", "c", "counter", "nextEntityId");
+        final Field entityAtomicField = getStaticFieldOfType(entityClass, AtomicInteger.class, "entityCount", "d", "c",
+            "counter", "nextEntityId");
         if (entityAtomicField == null) {
             return null;
         }
@@ -151,11 +151,11 @@ public final class SpigotEntityIdProvider implements EntityIdProvider {
     }
 
     private static Field getStaticFieldOfType(final Class<?> clazz, final Class<?> desiredType,
-                                              final String... possibleNames) {
+        final String... possibleNames) {
         for (final String name : possibleNames) {
             final Field field = getField(clazz, name);
-            if (field != null && desiredType.isAssignableFrom(field.getType())
-                    && Modifier.isStatic(field.getModifiers())) {
+            if (field != null && desiredType.isAssignableFrom(field.getType()) && Modifier.isStatic(
+                field.getModifiers())) {
                 return field;
             }
         }
@@ -169,10 +169,8 @@ public final class SpigotEntityIdProvider implements EntityIdProvider {
     }
 
     private static boolean isPaper() {
-        return Stream.of(
-                "com.destroystokyo.paper.PaperConfig",
-                "io.papermc.paper.configuration.Configuration"
-        ).anyMatch(SpigotEntityIdProvider::hasClass);
+        return Stream.of("com.destroystokyo.paper.PaperConfig",
+            "io.papermc.paper.configuration.Configuration").anyMatch(SpigotEntityIdProvider::hasClass);
     }
 
     private static boolean hasClass(final String className) {

@@ -7,6 +7,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 /** Bukkit lifecycle entry point; runtime construction and ownership live in bootstrap components. */
 public final class ChunkRevivePlugin extends JavaPlugin {
+
     private PluginRuntime runtime;
 
     @Override
@@ -32,16 +33,24 @@ public final class ChunkRevivePlugin extends JavaPlugin {
         requireRuntime().reload();
     }
 
+    public boolean tryReload() {
+        return requireRuntime().reload();
+    }
+
     @Override
     public void onDisable() {
-        if (runtime == null) return;
+        if (runtime == null) {
+            return;
+        }
         runtime.stop();
         runtime = null;
         Logging.logger().info("ChunkRevive disabled.");
     }
 
     private PluginRuntime requireRuntime() {
-        if (runtime == null) throw new IllegalStateException("ChunkRevive runtime is not active");
+        if (runtime == null) {
+            throw new IllegalStateException("ChunkRevive runtime is not active");
+        }
         return runtime;
     }
 }

@@ -1,8 +1,8 @@
 package github.freshchromatic.freshlib.gui.menu;
 
 import github.freshchromatic.freshlib.gui.inventorygui.GuiElement;
-import github.freshchromatic.freshlib.gui.inventorygui.StaticGuiElement;
 import github.freshchromatic.freshlib.gui.inventorygui.GuiPageElement;
+import github.freshchromatic.freshlib.gui.inventorygui.StaticGuiElement;
 import github.freshchromatic.freshlib.item.ItemDataComponents;
 import github.freshchromatic.freshlib.item.MaterialResolver;
 import github.freshchromatic.freshlib.item.materialresolvers.HeadDatabaseMaterialResolver;
@@ -10,18 +10,19 @@ import github.freshchromatic.freshlib.item.materialresolvers.ItemsAdderMaterialR
 import github.freshchromatic.freshlib.item.materialresolvers.NexoMaterialResolver;
 import github.freshchromatic.freshlib.item.materialresolvers.PlayerHeadMaterialResolver;
 import github.freshchromatic.freshlib.item.materialresolvers.VanillaMaterialResolver;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
+import org.bukkit.Color;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
@@ -32,11 +33,12 @@ import java.util.Locale;
 import java.util.Map;
 
 public class MenuItemBuilder {
-    protected final JavaPlugin plugin;
-    protected final MenuConfig menuConfig;
-    private final Map<String, ElementBuilder> customBuilders = new HashMap<>();
-    private final Map<String, ActionExecutor> executorHandlers = new HashMap<>();
-    private final List<MaterialResolver> materialResolvers = new ArrayList<>();
+
+    protected final JavaPlugin                plugin;
+    protected final MenuConfig                menuConfig;
+    private final Map<String, ElementBuilder> customBuilders    = new HashMap<>();
+    private final Map<String, ActionExecutor> executorHandlers  = new HashMap<>();
+    private final List<MaterialResolver>      materialResolvers = new ArrayList<>();
 
     public MenuItemBuilder(JavaPlugin plugin, MenuConfig menuConfig) {
         this.plugin = plugin;
@@ -50,7 +52,7 @@ public class MenuItemBuilder {
     // -------------------------------------------------------------------------
 
     public void registerType(String type, ElementBuilder builder) {
-        customBuilders.put(type.toLowerCase(), builder);
+        customBuilders.put(type.toLowerCase(Locale.ROOT), builder);
     }
 
     /**
@@ -69,7 +71,7 @@ public class MenuItemBuilder {
      * @param executor The executor to invoke when the prefix is matched.
      */
     public void registerExecutor(String prefix, ActionExecutor executor) {
-        executorHandlers.put(prefix.toLowerCase(), executor);
+        executorHandlers.put(prefix.toLowerCase(Locale.ROOT), executor);
     }
 
     /**
@@ -93,11 +95,11 @@ public class MenuItemBuilder {
         }
 
         // Resolve type: prefer root-level "type", fall back to "action.type"
-        String type = section.getString("type", "").toLowerCase();
+        String type = section.getString("type", "").toLowerCase(Locale.ROOT);
         if (type.isEmpty()) {
             ConfigurationSection actionSection = section.getConfigurationSection("action");
             if (actionSection != null) {
-                type = actionSection.getString("type", "static").toLowerCase();
+                type = actionSection.getString("type", "static").toLowerCase(Locale.ROOT);
             } else {
                 type = "static";
             }
@@ -134,7 +136,9 @@ public class MenuItemBuilder {
         GuiElement.Action configuredAction = buildExecutorAction(section);
 
         return new StaticGuiElement(character, item, click -> {
-            if (configuredAction != null) configuredAction.onClick(click);
+            if (configuredAction != null) {
+                configuredAction.onClick(click);
+            }
             click.getGui().close();
             return true;
         });
@@ -175,11 +179,11 @@ public class MenuItemBuilder {
      */
     protected GuiElement.Action buildExecutorAction(ConfigurationSection section) {
         ConfigurationSection actionSection = section.getConfigurationSection("action");
-        List<String> executors = actionSection == null
-                ? List.of()
-                : actionSection.getStringList("executor");
+        List<String> executors = actionSection == null ? List.of() : actionSection.getStringList("executor");
         List<String> commands = section.getStringList("commands");
-        if (executors.isEmpty() && commands.isEmpty()) return null;
+        if (executors.isEmpty() && commands.isEmpty()) {
+            return null;
+        }
 
         return click -> {
             for (String entry : executors) {
@@ -214,22 +218,24 @@ public class MenuItemBuilder {
                 default -> null;
             };
             if (required != null) {
-                if (click.getType() != required) return;
+                if (click.getType() != required) {
+                    return;
+                }
                 command = command.substring(guardSeparator + 1).trim();
             }
         }
 
         int separator = command.indexOf('=');
-        String prefix = separator < 0
-                ? ""
-                : command.substring(0, separator).trim().toLowerCase(Locale.ROOT);
+        String prefix = separator < 0 ? "" : command.substring(0, separator).trim().toLowerCase(Locale.ROOT);
         String argument = separator < 0 ? command : command.substring(separator + 1).trim();
 
         switch (prefix) {
             case "msg" -> who.sendMessage(menuConfig.parse(argument));
             case "console" -> dispatchConsoleCommandOnGlobalThread(argument);
             case "stopsound" -> {
-                if (who instanceof Player player) player.stopSound(argument);
+                if (who instanceof Player player) {
+                    player.stopSound(argument);
+                }
             }
             case "sound" -> playConfiguredSound(who, argument);
             default -> {
@@ -242,9 +248,13 @@ public class MenuItemBuilder {
     }
 
     private void playConfiguredSound(HumanEntity who, String argument) {
-        if (!(who instanceof Player player)) return;
+        if (!(who instanceof Player player)) {
+            return;
+        }
         String[] parts = argument.split("\\s+");
-        if (parts.length == 0 || parts[0].isBlank()) return;
+        if (parts.length == 0 || parts[0].isBlank()) {
+            return;
+        }
 
         float volume = parseFloat(parts, 1, 1.0f, "volume");
         float pitch = parseFloat(parts, 2, 1.0f, "pitch");
@@ -252,7 +262,9 @@ public class MenuItemBuilder {
     }
 
     private float parseFloat(String[] parts, int index, float fallback, String field) {
-        if (parts.length <= index) return fallback;
+        if (parts.length <= index) {
+            return fallback;
+        }
         try {
             return Float.parseFloat(parts[index]);
         } catch (NumberFormatException exception) {
@@ -266,10 +278,10 @@ public class MenuItemBuilder {
         String prefix;
         String argument;
         if (sep >= 0) {
-            prefix = entry.substring(0, sep).trim().toLowerCase();
+            prefix = entry.substring(0, sep).trim().toLowerCase(Locale.ROOT);
             argument = entry.substring(sep + 1).trim();
         } else {
-            prefix = entry.toLowerCase();
+            prefix = entry.toLowerCase(Locale.ROOT);
             argument = "";
         }
 
@@ -286,8 +298,8 @@ public class MenuItemBuilder {
         registerExecutor("close", (click, arg) -> click.getGui().close());
 
         // command: <cmd> — runs a command as console
-        registerExecutor("command", (click, arg) ->
-                dispatchConsoleCommandOnGlobalThread(replacePlayerPlaceholder(click, arg)));
+        registerExecutor("command", (click, arg) -> dispatchConsoleCommandOnGlobalThread(replacePlayerPlaceholder(click,
+            arg)));
 
         // player-command: <cmd> — makes the clicking player run a command
         registerExecutor("player-command", (click, arg) -> {
@@ -319,8 +331,7 @@ public class MenuItemBuilder {
     }
 
     private void runOnGlobalThread(Runnable action) {
-        plugin.getServer().getGlobalRegionScheduler().run(plugin,
-                task -> action.run());
+        plugin.getServer().getGlobalRegionScheduler().run(plugin, task -> action.run());
     }
 
     private void registerDefaultMaterialResolvers() {
@@ -360,8 +371,8 @@ public class MenuItemBuilder {
         return buildItemStack(section, player, "STONE", " ");
     }
 
-    private ItemStack buildItemStack(ConfigurationSection section, Player player,
-                                     String defaultMaterial, String defaultName) {
+    private ItemStack buildItemStack(ConfigurationSection section, Player player, String defaultMaterial,
+        String defaultName) {
         String itemModel = section.getString("item-model");
         String customModelData = getStringOption(section, "custom-model-data", "custom-data");
         String tooltipStyle = section.getString("tooltip-style");
@@ -369,17 +380,16 @@ public class MenuItemBuilder {
         Integer damage = section.contains("damage") ? section.getInt("damage") : null;
         String material = section.getString("material", defaultMaterial);
         String texture = section.getString("texture");
-        if (texture != null && !texture.isBlank()
-                && (material.equalsIgnoreCase("PLAYER_HEAD") || material.equalsIgnoreCase("HEAD"))) {
+        if (texture != null && !texture.isBlank() && (material.equalsIgnoreCase("PLAYER_HEAD")
+            || material.equalsIgnoreCase("HEAD"))) {
             material = "head:" + texture;
         }
 
-        String name = section.contains("name")
-                ? section.getString("name", defaultName)
-                : section.getString("display-name", defaultName);
+        String name = section.contains("name") ? section.getString("name", defaultName)
+            : section.getString("display-name", defaultName);
 
-        ItemStack item = buildItem(material, name, section.getStringList("lore"),
-                itemModel, customModelData, tooltipStyle, hideTooltip, damage, player);
+        ItemStack item = buildItem(material, name, section.getStringList("lore"), itemModel, customModelData,
+            tooltipStyle, hideTooltip, damage, player);
 
         int amount = section.getInt("amount", 1);
         if (amount > 0) {
@@ -392,14 +402,17 @@ public class MenuItemBuilder {
             applyEnchantments(meta, section);
 
             EnumSet<ItemFlag> flags = parseItemFlags(section.getStringList("flags"));
-            if (section.getBoolean("hide-enchantments", false)
-                    || section.getBoolean("hide-enchants", false)) {
+            if (section.getBoolean("hide-enchantments", false) || section.getBoolean("hide-enchants", false)) {
                 flags.add(ItemFlag.HIDE_ENCHANTS);
             }
-            if (!flags.isEmpty()) meta.addItemFlags(flags.toArray(ItemFlag[]::new));
+            if (!flags.isEmpty()) {
+                meta.addItemFlags(flags.toArray(ItemFlag[]::new));
+            }
 
             String color = section.getString("color");
-            if (color != null && !color.isBlank()) applyColor(meta, color, section.getCurrentPath());
+            if (color != null && !color.isBlank()) {
+                applyColor(meta, color, section.getCurrentPath());
+            }
         });
 
         return item;
@@ -421,7 +434,9 @@ public class MenuItemBuilder {
 
         for (String configured : itemSection.getStringList("enchantments")) {
             String entry = configured.trim();
-            if (entry.isEmpty()) continue;
+            if (entry.isEmpty()) {
+                continue;
+            }
 
             String[] parts = entry.split("\\s+");
             Enchantment enchantment = resolveEnchantment(parts[0]);
@@ -435,8 +450,8 @@ public class MenuItemBuilder {
                 try {
                     level = Integer.parseInt(parts[1]);
                 } catch (NumberFormatException exception) {
-                    plugin.getLogger().warning("[FreshLib] Invalid enchantment level in \""
-                            + configured + "\" at " + itemSection.getCurrentPath());
+                    plugin.getLogger().warning("[FreshLib] Invalid enchantment level in \"" + configured + "\" at "
+                        + itemSection.getCurrentPath());
                     continue;
                 }
             }
@@ -445,7 +460,9 @@ public class MenuItemBuilder {
     }
 
     private void applyEnchantmentSection(ItemMeta meta, ConfigurationSection enchantSection) {
-        if (enchantSection == null) return;
+        if (enchantSection == null) {
+            return;
+        }
 
         for (String enchantKey : enchantSection.getKeys(false)) {
             Enchantment enchantment = resolveEnchantment(enchantKey);
@@ -465,16 +482,17 @@ public class MenuItemBuilder {
     @SuppressWarnings("deprecation")
     private Enchantment resolveEnchantment(String rawKey) {
         String normalized = rawKey.trim().toLowerCase(Locale.ROOT);
-        NamespacedKey key = normalized.contains(":")
-                ? NamespacedKey.fromString(normalized)
-                : NamespacedKey.minecraft(normalized);
+        NamespacedKey key = normalized.contains(":") ? NamespacedKey.fromString(normalized)
+            : NamespacedKey.minecraft(normalized);
         return key == null ? null : Enchantment.getByKey(key);
     }
 
     private EnumSet<ItemFlag> parseItemFlags(List<String> configuredFlags) {
         EnumSet<ItemFlag> flags = EnumSet.noneOf(ItemFlag.class);
         for (String rawFlag : configuredFlags) {
-            if (rawFlag.equalsIgnoreCase("ALL")) return EnumSet.allOf(ItemFlag.class);
+            if (rawFlag.equalsIgnoreCase("ALL")) {
+                return EnumSet.allOf(ItemFlag.class);
+            }
             try {
                 flags.add(ItemFlag.valueOf(rawFlag.trim().toUpperCase(Locale.ROOT)));
             } catch (IllegalArgumentException exception) {
@@ -484,23 +502,22 @@ public class MenuItemBuilder {
         return flags;
     }
 
-    private void applyColor(org.bukkit.inventory.meta.ItemMeta meta, String rawColor, String path) {
+    private void applyColor(ItemMeta meta, String rawColor, String path) {
         String[] parts = rawColor.split(",");
         if (parts.length != 3) {
             plugin.getLogger().warning("[FreshLib] Color must use R,G,B format at " + path + ": \"" + rawColor + "\"");
             return;
         }
         try {
-            org.bukkit.Color color = org.bukkit.Color.fromRGB(
-                    Integer.parseInt(parts[0].trim()),
-                    Integer.parseInt(parts[1].trim()),
-                    Integer.parseInt(parts[2].trim()));
+            Color color = Color.fromRGB(Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()),
+                Integer.parseInt(parts[2].trim()));
             if (meta instanceof LeatherArmorMeta leatherArmorMeta) {
                 leatherArmorMeta.setColor(color);
             } else if (meta instanceof PotionMeta potionMeta) {
                 potionMeta.setColor(color);
             } else {
-                plugin.getLogger().warning("[FreshLib] Color is only supported for leather armor and potions at " + path);
+                plugin.getLogger().warning("[FreshLib] Color is only supported for leather armor and potions at "
+                    + path);
             }
         } catch (IllegalArgumentException exception) {
             plugin.getLogger().warning("[FreshLib] Invalid color at " + path + ": \"" + rawColor + "\"");
@@ -525,9 +542,8 @@ public class MenuItemBuilder {
      * @param damage           Optional {@code damage} value; null to skip.
      * @param player           The player the item is being built for; may be null.
      */
-    public ItemStack buildItem(String material, String name, List<String> lore,
-                                String itemModel, String customModelData, String tooltipStyle,
-                                Boolean hideTooltip, Integer damage, Player player) {
+    public ItemStack buildItem(String material, String name, List<String> lore, String itemModel,
+        String customModelData, String tooltipStyle, Boolean hideTooltip, Integer damage, Player player) {
         ItemStack item = resolveMaterial(material, player);
         item.editMeta(meta -> {
             meta.displayName(menuConfig.parse(name));
@@ -552,16 +568,24 @@ public class MenuItemBuilder {
         if (actionSection != null) {
             List<String> executors = actionSection.getStringList("executor");
             for (String ex : executors) {
-                String lower = ex.toLowerCase();
-                if (lower.contains("firstpage")) return GuiPageElement.PageAction.FIRST;
-                if (lower.contains("prevpage") || lower.contains("previous")) return GuiPageElement.PageAction.PREVIOUS;
-                if (lower.contains("lastpage")) return GuiPageElement.PageAction.LAST;
-                if (lower.contains("nextpage") || lower.contains("next")) return GuiPageElement.PageAction.NEXT;
+                String lower = ex.toLowerCase(Locale.ROOT);
+                if (lower.contains("firstpage")) {
+                    return GuiPageElement.PageAction.FIRST;
+                }
+                if (lower.contains("prevpage") || lower.contains("previous")) {
+                    return GuiPageElement.PageAction.PREVIOUS;
+                }
+                if (lower.contains("lastpage")) {
+                    return GuiPageElement.PageAction.LAST;
+                }
+                if (lower.contains("nextpage") || lower.contains("next")) {
+                    return GuiPageElement.PageAction.NEXT;
+                }
             }
         }
 
         // Fall back to legacy flat action string
-        String action = section.getString("action", "next").toLowerCase();
+        String action = section.getString("action", "next").toLowerCase(Locale.ROOT);
         return switch (action) {
             case "first", "firstpage" -> GuiPageElement.PageAction.FIRST;
             case "prev", "prevpage", "previous" -> GuiPageElement.PageAction.PREVIOUS;
@@ -575,7 +599,9 @@ public class MenuItemBuilder {
             ConfigurationSection inactiveSection = section.getConfigurationSection("inactive");
             String matName = inactiveSection.getString("material", "AIR");
             Material mat = Material.matchMaterial(matName);
-            if (mat == null || mat == Material.AIR) return null;
+            if (mat == null || mat == Material.AIR) {
+                return null;
+            }
             return buildItemStack(inactiveSection, null, matName, " ");
         }
 

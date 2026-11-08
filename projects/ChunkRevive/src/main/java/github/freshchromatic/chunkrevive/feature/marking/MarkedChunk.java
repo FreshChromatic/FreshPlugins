@@ -4,8 +4,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
 
-public record MarkedChunk(String world, int cx, int cz, UUID markedBy, long markedAt,
-                           @Nullable UUID structureGroupId, boolean biomeRegen) {
+public record MarkedChunk(String world, int cx, int cz, UUID markedBy, long markedAt, @Nullable UUID structureGroupId,
+    boolean biomeRegen) {
 
     public MarkedChunk(String world, int cx, int cz, UUID markedBy, long markedAt) {
         this(world, cx, cz, markedBy, markedAt, null, false);
@@ -22,7 +22,9 @@ public record MarkedChunk(String world, int cx, int cz, UUID markedBy, long mark
     // Identity is purely positional — same world + coords = same chunk
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof MarkedChunk other)) return false;
+        if (!(o instanceof MarkedChunk other)) {
+            return false;
+        }
         return cx == other.cx && cz == other.cz && world.equals(other.world);
     }
 

@@ -10,19 +10,20 @@ import org.jetbrains.annotations.Nullable;
 
 @Deprecated
 public class MessageHelper {
-    private static String primaryColor = "#59bdff";
+
+    private static String primaryColor   = "#59bdff";
     private static String secondaryColor = "#6696e3";
-    private static String successColor = "#81e366";
-    private static String warningColor = "#e3ca66";
-    private static String errorColor = "#e36666";
+    private static String successColor   = "#81e366";
+    private static String warningColor   = "#e3ca66";
+    private static String errorColor     = "#e36666";
 
     @Deprecated
     public static @NotNull String transform(@NotNull String message) {
         message = message.replace("<primaryColor>", "<color:" + primaryColor + ">")
-                .replace("<secondaryColor>", "<color:" + secondaryColor + ">")
-                .replace("<successColor>", "<color:" + successColor + ">")
-                .replace("<warningColor>", "<color:" + warningColor + ">")
-                .replace("<errorColor>", "<color:" + errorColor + ">");
+            .replace("<secondaryColor>", "<color:" + secondaryColor + ">")
+            .replace("<successColor>", "<color:" + successColor + ">")
+            .replace("<warningColor>", "<color:" + warningColor + ">")
+            .replace("<errorColor>", "<color:" + errorColor + ">");
 
         return message;
     }

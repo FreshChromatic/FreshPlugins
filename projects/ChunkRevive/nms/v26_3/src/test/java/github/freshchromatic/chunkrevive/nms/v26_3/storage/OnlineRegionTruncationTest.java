@@ -51,13 +51,13 @@ final class OnlineRegionTruncationTest {
             long populatedSize = Files.size(path);
             assertTrue(populatedSize > 8192L);
             long allocatedDataBytes = Math.ceilDiv(populatedSize - 8192L, 4096L) * 4096L;
-            assertEquals(allocatedDataBytes,
-                V26_3ChunkStorageGateway.allocatedSectorBytes(path, List.of(pos)),
+            assertEquals(allocatedDataBytes, V26_3ChunkStorageGateway.allocatedSectorBytes(path, List.of(pos)),
                 "allocated sectors should be reported even though clearing does not shrink the file");
 
             region.clear(pos);
             assertFalse(region.hasChunk(pos));
-            assertEquals(populatedSize, Files.size(path), "RegionFile.clear should free sectors without shrinking the file");
+            assertEquals(populatedSize, Files.size(path),
+                "RegionFile.clear should free sectors without shrinking the file");
 
             try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
                 channel.truncate(8192L);

@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ClaimGeometryTest {
+
     @Test
     void dominionUsesExclusiveUpperBoundsAcrossNegativeChunks() {
         var cuboid = new CuboidDTO(-16, 30, -1, 1, 40, 1);
@@ -38,7 +39,8 @@ class ClaimGeometryTest {
         var positions = new HashSet<ChunkPos>();
         positions.add(new ChunkPos(world, Chunk.getChunkKey(-2, 3), ChunkLayer.ROOF));
         positions.add(new ChunkPos(world, Chunk.getChunkKey(4, -5), ChunkLayer.GROUND));
-        var claim = new Claim(1, UUID.randomUUID(), positions, "", "", new HashSet<>(), new HashSet<>(), new HashSet<>());
+        var claim = new Claim(1, UUID.randomUUID(), positions, "", "", new HashSet<>(), new HashSet<>(),
+            new HashSet<>());
         var registry = new ClaimRegistry(List.of(claim));
 
         assertTrue(BonfireProtection.hasClaim(registry, world, -2, 3));
@@ -66,7 +68,7 @@ class ClaimGeometryTest {
     }
 
     private static World world(UUID id) {
-        return (World) Proxy.newProxyInstance(World.class.getClassLoader(), new Class<?>[]{World.class},
-            (proxy, method, arguments) -> method.getName().equals("getUID") ? id : null);
+        return (World) Proxy.newProxyInstance(World.class.getClassLoader(), new Class<?>[] { World.class }, (proxy,
+            method, arguments) -> method.getName().equals("getUID") ? id : null);
     }
 }

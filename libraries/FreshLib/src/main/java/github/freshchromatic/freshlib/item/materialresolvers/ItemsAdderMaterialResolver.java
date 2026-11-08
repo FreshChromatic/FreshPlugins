@@ -21,7 +21,8 @@ public final class ItemsAdderMaterialResolver implements MaterialResolver {
     @Override
     public ItemStack resolve(String materialTag, Player player) {
         if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) {
-            Logging.logger().warning("Material tag \"" + materialTag + "\" requires the ItemsAdder plugin, which isn't installed.");
+            Logging.logger().warning("Material tag \"" + materialTag
+                + "\" requires the ItemsAdder plugin, which isn't installed.");
             return new ItemStack(Material.BARRIER);
         }
         String id = materialTag.trim().substring("[itemsadder]".length()).trim();

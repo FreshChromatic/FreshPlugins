@@ -12,6 +12,7 @@ import github.freshchromatic.chunkrevive.nms.ChunkStage;
 import github.freshchromatic.chunkrevive.nms.DiskChunkSession;
 import github.freshchromatic.chunkrevive.nms.HeightmapKind;
 import github.freshchromatic.chunkrevive.nms.RegionScanResult;
+import github.freshchromatic.chunkrevive.nms.RegionIoFailure;
 import github.freshchromatic.chunkrevive.nms.StoredChunk;
 import github.freshchromatic.chunkrevive.nms.StructureInfo;
 import github.freshchromatic.chunkrevive.nms.WorldScanGateway;
@@ -39,12 +40,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 public final class V26_1_2WorldScanGateway implements WorldScanGateway {
+
     private static final Field LEVEL_STORAGE_ACCESS_FIELD = Arrays.stream(ServerLevel.class.getFields())
         .filter(field -> field.getType().equals(LevelStorageSource.LevelStorageAccess.class))
         .findAny()
@@ -59,8 +62,10 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
     @Override
     public Set<String> biomeIds(World world) {
         ServerLevel level = ((CraftWorld) world).getHandle();
-        Set<String> result = new java.util.TreeSet<>();
-        level.registryAccess().lookupOrThrow(Registries.BIOME).listElementIds()
+        Set<String> result = new TreeSet<>();
+        level.registryAccess()
+            .lookupOrThrow(Registries.BIOME)
+            .listElementIds()
             .map(key -> key.identifier().toString())
             .forEach(result::add);
         return result;
@@ -79,8 +84,9 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
         };
     }
 
-    private record Sampler(ServerLevel level, GenerationContext context,
-                           Heightmap.Types heightmap) implements BiomeSampler {
+    private record Sampler(ServerLevel level, GenerationContext context, Heightmap.Types heightmap) implements
+        BiomeSampler {
+
         @Override
         public boolean matches(int chunkX, int chunkZ, Set<String> targets, BiomeMatchMode mode) {
             return switch (mode) {
@@ -89,8 +95,7 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
                     boolean found = false;
                     for (int dx = 0; dx < 4 && !found; dx++) {
                         for (int dz = 0; dz < 4; dz++) {
-                            if (targets.contains(sample((chunkX << 4) + dx * 4 + 2,
-                                                        (chunkZ << 4) + dz * 4 + 2))) {
+                            if (targets.contains(sample((chunkX << 4) + dx * 4 + 2, (chunkZ << 4) + dz * 4 + 2))) {
                                 found = true;
                                 break;
                             }
@@ -107,19 +112,18 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
         }
 
         private String sample(int blockX, int blockZ) {
-            int surfaceY = context.generator().getBaseHeight(
-                blockX, blockZ, heightmap, level, context.randomState());
-            Holder<Biome> biome = context.biomeSource().getNoiseBiome(
-                QuartPos.fromBlock(blockX), QuartPos.fromBlock(surfaceY), QuartPos.fromBlock(blockZ),
-                context.randomState().sampler());
+            int surfaceY = context.generator().getBaseHeight(blockX, blockZ, heightmap, level, context.randomState());
+            Holder<Biome> biome = context.biomeSource().getNoiseBiome(QuartPos.fromBlock(blockX), QuartPos.fromBlock(
+                surfaceY), QuartPos.fromBlock(blockZ), context.randomState().sampler());
             return biome.unwrapKey().map(key -> key.identifier().toString()).orElse(null);
         }
     }
 
     private static final class Session implements DiskChunkSession {
-        private final ServerLevel level;
-        private final String worldName;
-        private final Path regionFolder;
+
+        private final ServerLevel                               level;
+        private final String                                    worldName;
+        private final Path                                      regionFolder;
         private final MoonriseRegionFileIO.RegionDataController chunkData;
 
         private Session(ServerLevel level, String worldName) {
@@ -138,7 +142,9 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
         public boolean exists(int chunkX, int chunkZ, ChunkStage minimumStage) {
             try {
                 CompoundTag nbt = readSafely(chunkX, chunkZ);
-                if (nbt == null) return false;
+                if (nbt == null) {
+                    return false;
+                }
                 return !persistedStage(nbt).isBefore(minimumStage);
             } catch (Exception ignored) {
                 return false;
@@ -147,15 +153,16 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
 
         @Override
         public RegionScanResult scanRegion(int regionX, int regionZ, ChunkStage minimumStage,
-                                           Predicate<String> structureFilter,
-                                           BooleanSupplier cancelled) throws IOException {
+            Predicate<String> structureFilter, BooleanSupplier cancelled) throws IOException {
             return onRegionIo(regionX << 5, regionZ << 5, () -> {
                 List<StoredChunk> chunks = new ArrayList<>();
                 int failures = 0;
                 var storage = chunkData.getCache();
                 for (int dx = 0; dx < 32; dx++) {
                     for (int dz = 0; dz < 32; dz++) {
-                        if (cancelled.getAsBoolean()) return new RegionScanResult(chunks, failures);
+                        if (cancelled.getAsBoolean()) {
+                            return new RegionScanResult(chunks, failures);
+                        }
                         int cx = regionX * 32 + dx, cz = regionZ * 32 + dz;
                         CompoundTag nbt;
                         try {
@@ -164,9 +171,10 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
                             failures++;
                             continue;
                         }
-                        if (nbt == null || persistedStage(nbt).isBefore(minimumStage)) continue;
-                        chunks.add(new StoredChunk(
-                            new ChunkCoordinate(cx, cz), structures(nbt, structureFilter)));
+                        if (nbt == null || persistedStage(nbt).isBefore(minimumStage)) {
+                            continue;
+                        }
+                        chunks.add(new StoredChunk(new ChunkCoordinate(cx, cz), structures(nbt, structureFilter)));
                     }
                 }
                 return new RegionScanResult(chunks, failures);
@@ -176,34 +184,40 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
         private List<StructureInfo> structures(CompoundTag chunkNbt, Predicate<String> filter) {
             List<StructureInfo> result = new ArrayList<>();
             CompoundTag starts = chunkNbt.getCompoundOrEmpty("structures").getCompoundOrEmpty("starts");
-            if (starts.isEmpty()) return result;
+            if (starts.isEmpty()) {
+                return result;
+            }
             var registry = level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
             var context = StructurePieceSerializationContext.fromLevel(level);
             for (String key : starts.keySet()) {
-                if (!filter.test(key)) continue;
+                if (!filter.test(key)) {
+                    continue;
+                }
                 Identifier id = Identifier.tryParse(key);
-                if (id == null || registry.getValue(id) == null) continue;
-                StructureStart start = StructureStart.loadStaticStart(
-                    context, starts.getCompoundOrEmpty(key), level.getSeed());
-                if (start == null || !start.isValid()) continue;
+                if (id == null || registry.getValue(id) == null) {
+                    continue;
+                }
+                StructureStart start = StructureStart.loadStaticStart(context, starts.getCompoundOrEmpty(key),
+                    level.getSeed());
+                if (start == null || !start.isValid()) {
+                    continue;
+                }
                 var box = start.getBoundingBox();
-                result.add(new StructureInfo(key, new BlockBounds(
-                    box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ())));
+                result.add(new StructureInfo(key, new BlockBounds(box.minX(), box.minY(), box.minZ(), box.maxX(),
+                    box.maxY(), box.maxZ())));
             }
             return result;
         }
 
         private CompoundTag readSafely(int chunkX, int chunkZ) throws IOException {
-            return onRegionIo(chunkX, chunkZ,
-                () -> chunkData.getCache().read(new ChunkPos(chunkX, chunkZ)));
+            return onRegionIo(chunkX, chunkZ, () -> chunkData.getCache().read(new ChunkPos(chunkX, chunkZ)));
         }
 
         @Override
         public void close() {
         }
 
-        private <T> T onRegionIo(int chunkX, int chunkZ, IoOperation<T> operation)
-                throws IOException {
+        private <T> T onRegionIo(int chunkX, int chunkZ, IoOperation<T> operation) throws IOException {
             CompletableFuture<T> result = new CompletableFuture<>();
             var task = chunkData.createRegionIoTask(chunkX, chunkZ, () -> {
                 try {
@@ -212,18 +226,19 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
                     result.completeExceptionally(failure);
                 }
             }, Priority.LOWEST);
-            if (!task.queue()) throw new IOException("Moonrise region I/O queue rejected scan task");
+            if (!task.queue()) {
+                throw new IOException("Moonrise region I/O queue rejected scan task");
+            }
             try {
                 return result.join();
             } catch (CompletionException failure) {
-                Throwable cause = failure.getCause();
-                if (cause instanceof IOException io) throw io;
-                throw new IOException("Moonrise region I/O scan failed", cause);
+                throw RegionIoFailure.toIOException(failure);
             }
         }
 
         @FunctionalInterface
         private interface IoOperation<T> {
+
             T run() throws Exception;
         }
 
@@ -234,7 +249,9 @@ public final class V26_1_2WorldScanGateway implements WorldScanGateway {
     }
 
     private static LevelStorageSource.LevelStorageAccess levelStorageAccess(ServerLevel level) {
-        if (LEVEL_STORAGE_ACCESS_FIELD == null) return level.getServer().storageSource;
+        if (LEVEL_STORAGE_ACCESS_FIELD == null) {
+            return level.getServer().storageSource;
+        }
         try {
             return (LevelStorageSource.LevelStorageAccess) LEVEL_STORAGE_ACCESS_FIELD.get(level);
         } catch (IllegalAccessException e) {

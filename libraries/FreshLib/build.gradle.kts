@@ -47,7 +47,7 @@ dependencies {
 
     // database drivers
     compileOnly("org.xerial:sqlite-jdbc:3.51.2.0")
-    compileOnly("com.mysql:mysql-connector-j:9.6.0")
+    runtimeOnly("com.mysql:mysql-connector-j:9.6.0")
 
     // Optional material-tag resolver integrations (soft-depend, see FreshLibPlugin)
     compileOnly("com.nexomc:nexo:1.0.0")
@@ -62,8 +62,9 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-engine:6.0.3")
     testImplementation("org.junit.platform:junit-platform-console-standalone:6.0.3")
     testImplementation("com.google.code.gson:gson:2.13.2")
-    // Required only while Gradle runs tests; Paper supplies it on a server.
-    testRuntimeOnly("net.kyori:adventure-text-serializer-ansi:4.26.1")
+    testImplementation("org.mockito:mockito-core:5.22.0")
+    testImplementation("io.papermc.paper:paper-api:$paperVersion")
+    testImplementation("net.kyori:adventure-text-serializer-ansi:4.26.1")
 }
 
 paper {

@@ -12,7 +12,12 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * Automatic configuration documentation generator.
@@ -80,7 +85,7 @@ public final class ConfigDocGenerator {
             Config instance = configClass.getDeclaredConstructor().newInstance();
             return instance.getFileName();
         } catch (Exception e) {
-            return configClass.getSimpleName().replaceAll("Config$", "").toLowerCase() + ".yml";
+            return configClass.getSimpleName().replaceAll("Config$", "").toLowerCase(Locale.ROOT) + ".yml";
         }
     }
 
@@ -89,7 +94,9 @@ public final class ConfigDocGenerator {
 
         List<Field> fields = getOrderedFields(clazz);
         for (Field field : fields) {
-            if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers())) continue;
+            if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers())) {
+                continue;
+            }
 
             Class<?> fieldType = field.getType();
             Comment comment = field.getDeclaredAnnotation(Comment.class);
@@ -134,7 +141,9 @@ public final class ConfigDocGenerator {
 
         for (Field field : fields) {
             int modifiers = field.getModifiers();
-            if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers)) continue;
+            if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers)) {
+                continue;
+            }
             result.add(field);
         }
 
@@ -160,8 +169,12 @@ public final class ConfigDocGenerator {
             }
 
             Object value = field.get(instance);
-            if (value == null) return "null";
-            if (value instanceof String) return "\"" + value + "\"";
+            if (value == null) {
+                return "null";
+            }
+            if (value instanceof String) {
+                return "\"" + value + "\"";
+            }
             if (value.getClass().isArray()) {
                 return Arrays.toString((Object[]) value);
             }
@@ -211,8 +224,7 @@ public final class ConfigDocGenerator {
             for (String def : constants.value()) {
                 int eqIdx = def.indexOf('=');
                 if (eqIdx > 0) {
-                    yaml.append("# %").append(index).append(" = ")
-                            .append(def.substring(eqIdx + 1).trim()).append("\n");
+                    yaml.append("# %").append(index).append(" = ").append(def.substring(eqIdx + 1).trim()).append("\n");
                 }
                 index++;
             }
@@ -228,7 +240,9 @@ public final class ConfigDocGenerator {
         List<Field> fields = getOrderedFields(clazz);
 
         for (Field field : fields) {
-            if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers())) continue;
+            if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers())) {
+                continue;
+            }
 
             Comment comment = field.getDeclaredAnnotation(Comment.class);
             if (comment != null) {
@@ -281,7 +295,9 @@ public final class ConfigDocGenerator {
 
     private static void findUndocumentedFieldsRecursive(Class<?> clazz, String prefix, List<String> results) {
         for (Field field : getOrderedFields(clazz)) {
-            if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers())) continue;
+            if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers())) {
+                continue;
+            }
 
             Comment comment = field.getDeclaredAnnotation(Comment.class);
             if (comment == null || comment.value().isEmpty()) {
@@ -291,11 +307,8 @@ public final class ConfigDocGenerator {
 
             Class<?> fieldType = field.getType();
             if (fieldType.isAnnotationPresent(ConfigSerializable.class)) {
-                findUndocumentedFieldsRecursive(
-                        fieldType,
-                        prefix.isEmpty() ? field.getName() : prefix + "." + field.getName(),
-                        results
-                );
+                findUndocumentedFieldsRecursive(fieldType, prefix.isEmpty() ? field.getName()
+                    : prefix + "." + field.getName(), results);
             }
         }
     }

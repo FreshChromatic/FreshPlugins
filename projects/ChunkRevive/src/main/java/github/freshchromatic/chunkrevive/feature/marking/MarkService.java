@@ -1,7 +1,5 @@
 package github.freshchromatic.chunkrevive.feature.marking;
 
-import github.freshchromatic.chunkrevive.feature.marking.MarkRegistry;
-import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
 import github.freshchromatic.chunkrevive.config.WorldAccessPolicy;
 
 import java.util.Comparator;
@@ -12,14 +10,17 @@ import java.util.concurrent.CompletableFuture;
 
 /** Application use cases for marked chunks, shared by commands and listeners. */
 public final class MarkService {
-    public enum MarkStatus { SUCCESS, ALREADY_MARKED, CLAIM_BLOCKED, WORLD_NOT_ALLOWED }
 
-    private final MarkRegistry markRegistry;
-    private final WorldAccessPolicy worldAccessPolicy;
+    public enum MarkStatus {
+        SUCCESS, ALREADY_MARKED, CLAIM_BLOCKED, WORLD_NOT_ALLOWED
+    }
+
+    private final MarkRegistry          markRegistry;
+    private final WorldAccessPolicy     worldAccessPolicy;
     private final ProtectedMarkExecutor protectedMarks;
 
     public MarkService(MarkRegistry markRegistry, WorldAccessPolicy worldAccessPolicy,
-                       ProtectedMarkExecutor protectedMarks) {
+        ProtectedMarkExecutor protectedMarks) {
         this.markRegistry = markRegistry;
         this.worldAccessPolicy = worldAccessPolicy;
         this.protectedMarks = protectedMarks;
@@ -29,15 +30,19 @@ public final class MarkService {
         if (!worldAccessPolicy.isAllowed(world, WorldAccessPolicy.Scope.MANUAL_MARK)) {
             return CompletableFuture.completedFuture(MarkStatus.WORLD_NOT_ALLOWED);
         }
-        return protectedMarks.mark(world, cx, cz, actor, false).thenApply(status -> switch (status) {
+        return protectedMarks.mark(world, cx, cz, actor).thenApply(status -> switch (status) {
             case SUCCESS -> MarkStatus.SUCCESS;
             case ALREADY_MARKED -> MarkStatus.ALREADY_MARKED;
             case RESIDENCE_BLOCKED -> MarkStatus.CLAIM_BLOCKED;
         });
     }
 
-    public boolean unmark(String world, int cx, int cz, UUID actor) {
-        return markRegistry.unmark(world, cx, cz, actor);
+    public CompletableFuture<Optional<MarkedChunk>> unmarkPersisted(String world, int cx, int cz) {
+        return markRegistry.unmarkPersisted(world, cx, cz);
+    }
+
+    public void refreshUnmarkedDisplay(MarkedChunk chunk) {
+        markRegistry.refreshUnmarkedDisplay(chunk);
     }
 
     public boolean toggleFollowMode(UUID player, FollowMode mode) {
@@ -56,16 +61,17 @@ public final class MarkService {
         return markRegistry.isMarked(world, cx, cz);
     }
 
-    public int unmarkArea(String world, int minCx, int maxCx, int minCz, int maxCz) {
+    public CompletableFuture<Integer> unmarkArea(String world, int minCx, int maxCx, int minCz, int maxCz) {
         return markRegistry.unmarkResidenceArea(world, minCx, maxCx, minCz, maxCz);
     }
 
-    public MarkRegistry.ResetResult resetWorld(String world) {
+    public CompletableFuture<MarkRegistry.ResetResult> resetWorld(String world) {
         return markRegistry.resetMarkForWorld(world);
     }
 
     public List<MarkedChunk> independentMarksNewestFirst() {
-        return markRegistry.getMarkedChunks().stream()
+        return markRegistry.getMarkedChunks()
+            .stream()
             .filter(chunk -> chunk.structureGroupId() == null)
             .sorted(Comparator.comparingLong(MarkedChunk::markedAt).reversed())
             .toList();

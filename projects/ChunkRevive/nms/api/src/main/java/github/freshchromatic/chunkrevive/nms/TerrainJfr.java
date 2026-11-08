@@ -12,15 +12,17 @@ import jdk.jfr.Timespan;
 /** Custom JFR events that correlate JVM samples with ChunkRevive terrain work. */
 public final class TerrainJfr {
 
-    private TerrainJfr() {}
+    private TerrainJfr() {
+    }
 
     @Name("github.freshchromatic.chunkrevive.TerrainTask")
     @Label("ChunkRevive Terrain Task")
     @Description("One chunk-local terrain generation task")
-    @Category({"ChunkRevive", "Terrain"})
+    @Category({ "ChunkRevive", "Terrain" })
     @Threshold("10 ms")
     @StackTrace(false)
     public static final class TaskEvent extends Event {
+
         @Label("Stage")
         public String stage;
 
@@ -48,10 +50,11 @@ public final class TerrainJfr {
     @Name("github.freshchromatic.chunkrevive.TerrainPhase")
     @Label("ChunkRevive Terrain Phase")
     @Description("A complete ChunkRevive terrain generation phase")
-    @Category({"ChunkRevive", "Terrain"})
+    @Category({ "ChunkRevive", "Terrain" })
     @Threshold("1 ms")
     @StackTrace(false)
     public static final class PhaseEvent extends Event {
+
         @Label("Phase")
         public String phase;
 
@@ -96,7 +99,9 @@ public final class TerrainJfr {
         event.succeeded = succeeded;
         event.result = result == null ? "" : result;
         event.end();
-        if (event.shouldCommit()) event.commit();
+        if (event.shouldCommit()) {
+            event.commit();
+        }
     }
 
     public static PhaseEvent beginPhase(String phase, int targetChunks) {
@@ -107,14 +112,16 @@ public final class TerrainJfr {
         return event;
     }
 
-    public static void endPhase(PhaseEvent event, int tasks, long workerNanos,
-                                long gcCollections, long gcMillis, boolean succeeded) {
+    public static void endPhase(PhaseEvent event, int tasks, long workerNanos, long gcCollections, long gcMillis,
+        boolean succeeded) {
         event.tasks = tasks;
         event.workerNanos = Math.max(0L, workerNanos);
         event.gcCollections = Math.max(0L, gcCollections);
         event.gcMillis = Math.max(0L, gcMillis);
         event.succeeded = succeeded;
         event.end();
-        if (event.shouldCommit()) event.commit();
+        if (event.shouldCommit()) {
+            event.commit();
+        }
     }
 }

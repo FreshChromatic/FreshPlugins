@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 
 /** Version-specific online chunk-holder and region-storage operations. */
 public interface ChunkStorageGateway {
+
     int generationPadding();
 
     Optional<ChunkCoordinate> firstHolder(World world, ChunkArea area);

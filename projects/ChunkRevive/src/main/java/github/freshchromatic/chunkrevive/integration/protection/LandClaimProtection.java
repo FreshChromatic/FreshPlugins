@@ -4,6 +4,7 @@ import org.ayosynk.landClaimPlugin.api.LandClaimAPI;
 import org.bukkit.World;
 
 final class LandClaimProtection extends ExternalProtection {
+
     LandClaimProtection() {
         super("LandClaimPlugin");
     }

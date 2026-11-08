@@ -18,33 +18,35 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URLEncoder;
+import java.math.BigInteger;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.function.Supplier;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 /** Polls Modrinth's public API; Modrinth does not push release webhooks to plugin servers. */
 public final class ModrinthUpdateChecker implements Listener {
-    private static final String PROJECT_ID = "chunkrevive";
-    private static final long CHECK_INTERVAL_TICKS = 12L * 60L * 60L * 20L;
-    private static final URI API_BASE = URI.create("https://api.modrinth.com/v2/project/");
-    private static final HttpClient HTTP = HttpClient.newBuilder()
+
+    private static final String     PROJECT_ID           = "chunkrevive";
+    private static final long       CHECK_INTERVAL_TICKS = 12L * 60L * 60L * 20L;
+    private static final URI        API_BASE             = URI.create("https://api.modrinth.com/v2/project/");
+    private static final HttpClient HTTP                 = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .build();
 
-    private final ChunkRevivePlugin plugin;
+    private final ChunkRevivePlugin  plugin;
     private final Supplier<Messages> messages;
-    private ScheduledTask task;
-    private volatile String announcedVersion;
-    private volatile RemoteVersion announced;
+    private ScheduledTask            task;
+    private volatile String          announcedVersion;
+    private volatile RemoteVersion   announced;
 
     public ModrinthUpdateChecker(ChunkRevivePlugin plugin, Supplier<Messages> messages) {
         this.plugin = plugin;
@@ -53,7 +55,9 @@ public final class ModrinthUpdateChecker implements Listener {
 
     public void start(PluginConfig.Updates config) {
         stop();
-        if (!config.enabled) return;
+        if (!config.enabled) {
+            return;
+        }
 
         task = Scheduler.runTaskTimerAsynchronously(plugin, this::check, 20L * 30L, CHECK_INTERVAL_TICKS);
     }
@@ -68,19 +72,25 @@ public final class ModrinthUpdateChecker implements Listener {
     private void check() {
         try {
             Optional<RemoteVersion> latest = fetchLatest();
-            if (latest.isEmpty()) return;
+            if (latest.isEmpty()) {
+                return;
+            }
 
             String installed = plugin.getPluginMeta().getVersion();
             RemoteVersion remote = latest.get();
-            if (compareVersions(remote.number(), installed) <= 0 || remote.number().equals(announcedVersion)) return;
+            if (compareVersions(remote.number(), installed) <= 0 || remote.number().equals(announcedVersion)) {
+                return;
+            }
 
             announcedVersion = remote.number();
             announced = remote;
-            String message = "ChunkRevive " + remote.number() + " is available on Modrinth (installed: "
-                + installed + "): " + remote.url();
+            String message = "ChunkRevive " + remote.number() + " is available on Modrinth (installed: " + installed
+                + "): " + remote.url();
             Logging.logger().info(message);
         } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             Logging.logger().warning("Could not check Modrinth for ChunkRevive updates: " + e.getMessage());
         } catch (RuntimeException e) {
             Logging.logger().warning("Could not parse the Modrinth update response: " + e.getMessage());
@@ -101,15 +111,14 @@ public final class ModrinthUpdateChecker implements Listener {
 
         String minecraftVersion = Bukkit.getMinecraftVersion();
         JsonArray versions = JsonParser.parseString(response.body()).getAsJsonArray();
-        return versions.asList().stream()
+        return versions.asList()
+            .stream()
             .map(JsonElement::getAsJsonObject)
             .filter(version -> "listed".equals(string(version, "status")))
             .filter(version -> "release".equals(string(version, "version_type")))
             .filter(version -> supports(version, minecraftVersion))
-            .map(version -> new RemoteVersion(
-                string(version, "version_number"),
-                Instant.parse(string(version, "date_published")),
-                "https://modrinth.com/plugin/" + PROJECT_ID + "/version/" + string(version, "id")))
+            .map(version -> new RemoteVersion(string(version, "version_number"), Instant.parse(string(version, "date_published")), "https://modrinth.com/plugin/"
+                        + PROJECT_ID + "/version/" + string(version, "id")))
             .filter(version -> !version.number().isBlank())
             .max(Comparator.comparing(RemoteVersion::published));
     }
@@ -118,12 +127,12 @@ public final class ModrinthUpdateChecker implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         RemoteVersion remote = latestAvailable();
-        if (!plugin.getPluginConfig().updates.enabled || remote == null
-            || !player.hasPermission("chunkrevive.admin")) return;
+        if (!plugin.getPluginConfig().updates.enabled || remote == null || !player.hasPermission("chunkrevive.admin")) {
+            return;
+        }
 
-        player.sendMessage(messages.get().update.available.withPlaceholders(
-            Components.placeholder("latest_version", remote.number()),
-            Components.placeholder("current_version", plugin.getPluginMeta().getVersion()),
+        player.sendMessage(messages.get().update.available.withPlaceholders(Components.placeholder("latest_version",
+            remote.number()), Components.placeholder("current_version", plugin.getPluginMeta().getVersion()),
             Components.placeholder("url", remote.url())));
     }
 
@@ -134,7 +143,10 @@ public final class ModrinthUpdateChecker implements Listener {
     private static boolean supports(JsonObject version, String minecraftVersion) {
         JsonElement gameVersions = version.get("game_versions");
         return gameVersions != null && gameVersions.isJsonArray()
-            && gameVersions.getAsJsonArray().asList().stream().anyMatch(element -> minecraftVersion.equals(element.getAsString()));
+            && gameVersions.getAsJsonArray()
+                .asList()
+                .stream()
+                .anyMatch(element -> minecraftVersion.equals(element.getAsString()));
     }
 
     private static String string(JsonObject object, String field) {
@@ -151,7 +163,9 @@ public final class ModrinthUpdateChecker implements Listener {
             String a = i < leftParts.length ? leftParts[i] : "0";
             String b = i < rightParts.length ? rightParts[i] : "0";
             int result = comparePart(a, b);
-            if (result != 0) return result;
+            if (result != 0) {
+                return result;
+            }
         }
         return 0;
     }
@@ -160,7 +174,7 @@ public final class ModrinthUpdateChecker implements Listener {
         boolean leftNumber = left.chars().allMatch(Character::isDigit);
         boolean rightNumber = right.chars().allMatch(Character::isDigit);
         if (leftNumber && rightNumber) {
-            return new java.math.BigInteger(left).compareTo(new java.math.BigInteger(right));
+            return new BigInteger(left).compareTo(new BigInteger(right));
         }
         return left.compareTo(right);
     }

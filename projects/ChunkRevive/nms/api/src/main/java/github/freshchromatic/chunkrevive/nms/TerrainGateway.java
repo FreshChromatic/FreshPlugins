@@ -11,19 +11,13 @@ import java.util.function.IntConsumer;
 
 /** All terrain-generation operations whose implementation is tied to a server version. */
 public interface TerrainGateway {
+
     void initialize(JavaPlugin plugin);
 
     void configure(TerrainSettings settings);
 
-    CompletableFuture<Void> generate(
-        World world,
-        Collection<ChunkCoordinate> chunks,
-        long seed,
-        IntConsumer progress,
-        Consumer<String> stage,
-        BooleanSupplier cancelled,
-        int[] extraContextBounds
-    );
+    CompletableFuture<Void> generate(World world, Collection<ChunkCoordinate> chunks, long seed, IntConsumer progress,
+        Consumer<String> stage, BooleanSupplier cancelled, ChunkArea extraContextBounds);
 
     void beginBulkSession(int targetCount);
 

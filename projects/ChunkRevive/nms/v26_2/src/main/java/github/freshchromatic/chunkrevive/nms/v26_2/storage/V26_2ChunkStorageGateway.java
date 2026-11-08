@@ -33,8 +33,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
-    private static final long EMPTY_REGION_BYTES = 8192L;
-    private static final Pattern REGION_FILE_NAME = Pattern.compile("r\\.(-?\\d+)\\.(-?\\d+)\\.mca");
+
+    private static final long    EMPTY_REGION_BYTES = 8192L;
+    private static final Pattern REGION_FILE_NAME   = Pattern.compile("r\\.(-?\\d+)\\.(-?\\d+)\\.mca");
 
     @Override
     public int generationPadding() {
@@ -57,15 +58,16 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
 
     @Override
     public CompletableFuture<Long> deleteChunks(World world, Collection<ChunkCoordinate> chunks) {
-        if (chunks.isEmpty()) return CompletableFuture.completedFuture(0L);
+        if (chunks.isEmpty()) {
+            return CompletableFuture.completedFuture(0L);
+        }
         var level = (ChunkSystemServerLevel) ((CraftWorld) world).getHandle();
         Map<Long, List<ChunkPos>> byRegion = new LinkedHashMap<>();
         for (ChunkCoordinate chunk : chunks) {
             int regionX = Math.floorDiv(chunk.x(), 32);
             int regionZ = Math.floorDiv(chunk.z(), 32);
             long regionKey = ((long) regionX << 32) ^ (regionZ & 0xffffffffL);
-            byRegion.computeIfAbsent(regionKey, ignored -> new ArrayList<>())
-                .add(new ChunkPos(chunk.x(), chunk.z()));
+            byRegion.computeIfAbsent(regionKey, ignored -> new ArrayList<>()).add(new ChunkPos(chunk.x(), chunk.z()));
         }
         List<CompletableFuture<Long>> operations = new ArrayList<>();
         for (List<ChunkPos> positions : byRegion.values()) {
@@ -82,7 +84,9 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
         int minX = regionX << 5, minZ = regionZ << 5;
         List<ChunkPos> positions = new ArrayList<>(1024);
         for (int cx = minX; cx <= minX + 31; cx++) {
-            for (int cz = minZ; cz <= minZ + 31; cz++) positions.add(new ChunkPos(cx, cz));
+            for (int cz = minZ; cz <= minZ + 31; cz++) {
+                positions.add(new ChunkPos(cx, cz));
+            }
         }
         List<CompletableFuture<Long>> operations = new ArrayList<>();
         for (var type : MoonriseRegionFileIO.RegionFileType.values()) {
@@ -108,14 +112,11 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
         for (String directory : List.of("region", "poi", "entities")) {
             scanEmptyRegionDirectory(worldFolder.resolve(directory), regions);
         }
-        return regions.values().stream()
-            .map(region -> new EmptyRegionInfo(region.x, region.z, region.bytes))
-            .toList();
+        return regions.values().stream().map(region -> new EmptyRegionInfo(region.x, region.z, region.bytes)).toList();
     }
 
     @Override
-    public CompletableFuture<Long> pruneEmptyRegion(World world, int regionX, int regionZ,
-                                                     boolean forceToDisk) {
+    public CompletableFuture<Long> pruneEmptyRegion(World world, int regionX, int regionZ, boolean forceToDisk) {
         var level = (ChunkSystemServerLevel) ((CraftWorld) world).getHandle();
         List<CompletableFuture<Long>> operations = new ArrayList<>();
         for (var type : MoonriseRegionFileIO.RegionFileType.values()) {
@@ -124,21 +125,27 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
         return sum(operations);
     }
 
-    private static void scanEmptyRegionDirectory(Path directory,
-                                                 Map<Long, MutableEmptyRegion> regions) throws IOException {
-        if (!Files.isDirectory(directory)) return;
+    private static void scanEmptyRegionDirectory(Path directory, Map<Long, MutableEmptyRegion> regions)
+        throws IOException {
+        if (!Files.isDirectory(directory)) {
+            return;
+        }
         try (var files = Files.newDirectoryStream(directory, "*.mca")) {
             for (Path file : files) {
                 try {
                     Matcher matcher = REGION_FILE_NAME.matcher(file.getFileName().toString());
-                    if (!matcher.matches()) continue;
+                    if (!matcher.matches()) {
+                        continue;
+                    }
                     long size = Files.size(file);
-                    if (size <= EMPTY_REGION_BYTES || !hasEmptyLocationTable(file)) continue;
+                    if (size <= EMPTY_REGION_BYTES || !hasEmptyLocationTable(file)) {
+                        continue;
+                    }
                     int regionX = Integer.parseInt(matcher.group(1));
                     int regionZ = Integer.parseInt(matcher.group(2));
                     long key = ((long) regionX << 32) ^ (regionZ & 0xffffffffL);
-                    MutableEmptyRegion region = regions.computeIfAbsent(
-                        key, ignored -> new MutableEmptyRegion(regionX, regionZ));
+                    MutableEmptyRegion region = regions.computeIfAbsent(key, ignored -> new MutableEmptyRegion(regionX,
+                        regionZ));
                     region.bytes += size - EMPTY_REGION_BYTES;
                 } catch (java.nio.file.NoSuchFileException ignored) {
                     // A concurrently removed file no longer needs pruning.
@@ -154,18 +161,21 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
             while (locations.hasRemaining()) {
                 int read = channel.read(locations);
-                if (read < 0) return false;
+                if (read < 0) {
+                    return false;
+                }
             }
         }
         for (byte value : locations.array()) {
-            if (value != 0) return false;
+            if (value != 0) {
+                return false;
+            }
         }
         return true;
     }
 
-    private CompletableFuture<Long> truncateStorageIfEmpty(
-            ChunkSystemServerLevel level, MoonriseRegionFileIO.RegionFileType type,
-            int regionX, int regionZ, boolean forceToDisk) {
+    private CompletableFuture<Long> truncateStorageIfEmpty(ChunkSystemServerLevel level,
+        MoonriseRegionFileIO.RegionFileType type, int regionX, int regionZ, boolean forceToDisk) {
         CompletableFuture<Long> result = new CompletableFuture<>();
         MoonriseRegionFileIO.RegionDataController controller = controller(level, type);
         int chunkX = regionX << 5;
@@ -173,8 +183,8 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
         var task = controller.createRegionIoTask(chunkX, chunkZ, () -> {
             try {
                 var storage = controller.getCache();
-                RegionFile regionFile = ((ChunkSystemRegionFileStorage) storage)
-                    .moonrise$getRegionFileIfExists(chunkX, chunkZ);
+                RegionFile regionFile = ((ChunkSystemRegionFileStorage) storage).moonrise$getRegionFileIfExists(chunkX,
+                    chunkZ);
                 if (regionFile == null) {
                     result.complete(0L);
                     return;
@@ -198,7 +208,9 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
                 regionFile.flush();
                 try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
                     channel.truncate(EMPTY_REGION_BYTES);
-                    if (forceToDisk) channel.force(true);
+                    if (forceToDisk) {
+                        channel.force(true);
+                    }
                 }
                 result.complete(Math.max(0L, before - Files.size(path)));
             } catch (Throwable failure) {
@@ -211,8 +223,8 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
         return result;
     }
 
-    private static MoonriseRegionFileIO.RegionDataController controller(
-            ChunkSystemServerLevel level, MoonriseRegionFileIO.RegionFileType type) {
+    private static MoonriseRegionFileIO.RegionDataController controller(ChunkSystemServerLevel level,
+        MoonriseRegionFileIO.RegionFileType type) {
         return switch (type) {
             case CHUNK_DATA -> level.moonrise$getChunkDataController();
             case POI_DATA -> level.moonrise$getPoiChunkDataController();
@@ -220,11 +232,8 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
         };
     }
 
-    private CompletableFuture<Long> clearStorage(ChunkSystemServerLevel level,
-                                                  MoonriseRegionFileIO.RegionFileType type,
-                                                  Collection<ChunkPos> positions,
-                                                  boolean truncate,
-                                                  boolean forceToDisk) {
+    private CompletableFuture<Long> clearStorage(ChunkSystemServerLevel level, MoonriseRegionFileIO.RegionFileType type,
+        Collection<ChunkPos> positions, boolean truncate, boolean forceToDisk) {
         CompletableFuture<Long> result = new CompletableFuture<>();
         MoonriseRegionFileIO.RegionDataController controller = controller(level, type);
         ChunkPos first = positions.iterator().next();
@@ -232,14 +241,17 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
             try {
                 var storage = controller.getCache();
                 long before = 0L;
-                RegionFile regionFile = ((ChunkSystemRegionFileStorage) storage)
-                    .moonrise$getRegionFileIfExists(first.x(), first.z());
-                if (regionFile != null) before = Files.size(regionFile.getPath());
-                long reclaimed = regionFile == null
-                    ? 0L : allocatedSectorBytes(regionFile.getPath(), positions);
-                for (ChunkPos pos : positions) storage.write(pos, null);
-                regionFile = ((ChunkSystemRegionFileStorage) storage)
-                    .moonrise$getRegionFileIfLoaded(first.x(), first.z());
+                RegionFile regionFile = ((ChunkSystemRegionFileStorage) storage).moonrise$getRegionFileIfExists(
+                    first.x(), first.z());
+                if (regionFile != null) {
+                    before = Files.size(regionFile.getPath());
+                }
+                long reclaimed = regionFile == null ? 0L : allocatedSectorBytes(regionFile.getPath(), positions);
+                for (ChunkPos pos : positions) {
+                    storage.write(pos, null);
+                }
+                regionFile = ((ChunkSystemRegionFileStorage) storage).moonrise$getRegionFileIfLoaded(first.x(),
+                    first.z());
                 if (truncate && regionFile != null) {
                     for (ChunkPos pos : positions) {
                         if (regionFile.hasChunk(pos)) {
@@ -249,11 +261,13 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
                     regionFile.flush();
                     try (FileChannel channel = FileChannel.open(regionFile.getPath(), StandardOpenOption.WRITE)) {
                         channel.truncate(EMPTY_REGION_BYTES);
-                        if (forceToDisk) channel.force(true);
+                        if (forceToDisk) {
+                            channel.force(true);
+                        }
                     }
                 }
-                long after = regionFile != null && Files.exists(regionFile.getPath())
-                    ? Files.size(regionFile.getPath()) : 0L;
+                long after = regionFile != null && Files.exists(regionFile.getPath()) ? Files.size(regionFile.getPath())
+                    : 0L;
                 // Clearing an individual chunk releases its sectors back to RegionFile's free
                 // list but normally does not shrink the .mca file. Report that reusable capacity
                 // instead of relying solely on the physical file-length delta (which is 0).
@@ -269,14 +283,18 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
     }
 
     static long allocatedSectorBytes(Path regionPath, Collection<ChunkPos> positions) throws IOException {
-        if (!Files.exists(regionPath) || Files.size(regionPath) < 4096L) return 0L;
+        if (!Files.exists(regionPath) || Files.size(regionPath) < 4096L) {
+            return 0L;
+        }
         ByteBuffer locations = ByteBuffer.allocate(4096);
         try (FileChannel channel = FileChannel.open(regionPath, StandardOpenOption.READ)) {
             while (locations.hasRemaining() && channel.read(locations) >= 0) {
                 // Keep reading until the complete location table is available or EOF is reached.
             }
         }
-        if (locations.position() < 4096) return 0L;
+        if (locations.position() < 4096) {
+            return 0L;
+        }
         locations.flip();
         long sectors = 0L;
         for (ChunkPos pos : positions) {
@@ -284,20 +302,23 @@ public final class V26_2ChunkStorageGateway implements ChunkStorageGateway {
             int location = locations.getInt(index << 2);
             int sectorOffset = location >>> 8;
             int sectorCount = location & 0xff;
-            if (sectorOffset >= 2 && sectorCount > 0) sectors += sectorCount;
+            if (sectorOffset >= 2 && sectorCount > 0) {
+                sectors += sectorCount;
+            }
         }
         return sectors * 4096L;
     }
 
     private static CompletableFuture<Long> sum(List<CompletableFuture<Long>> futures) {
-        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-            .thenApply(ignored -> futures.stream().mapToLong(CompletableFuture::join).sum());
+        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).thenApply(
+            ignored -> futures.stream().mapToLong(CompletableFuture::join).sum());
     }
 
     private static final class MutableEmptyRegion {
+
         private final int x;
         private final int z;
-        private long bytes;
+        private long      bytes;
 
         private MutableEmptyRegion(int x, int z) {
             this.x = x;

@@ -14,67 +14,78 @@ import java.util.stream.StreamSupport;
 public final class Messages implements Config {
 
     public Command command = new Command();
-    
+
     @Setting("click-to-copy")
     public ComponentMessage clickToCopy = new ComponentMessage("Click to copy to clipboard");
-    
+
     @Setting("click-for-help")
     public ComponentMessage clickForHelp = new ComponentMessage("Click for help");
 
     @Setting("plugin-reloaded")
     public ComponentMessage pluginReloaded = new ComponentMessage("<green><name> v<version> reloaded");
 
+    @Setting("plugin-reload-failed")
+    public ComponentMessage pluginReloadFailed = new ComponentMessage(
+        "<red><name> could not reload; check the server log for details");
+
     @ConfigSerializable
     public static class Command {
-        public ComponentMessage prefix = new ComponentMessage("<white>[<gradient:#0099FF:#0044AA>FreshLib</gradient>]</white> ");
-        public Description description = new Description();
-        public Argument argument = new Argument();
-        public CommandMessages message = new CommandMessages();
+
+        public ComponentMessage prefix      = new ComponentMessage(
+            "<white>[<gradient:#0099FF:#0044AA>FreshLib</gradient>]</white> ");
+        public Description      description = new Description();
+        public Argument         argument    = new Argument();
+        public CommandMessages  message     = new CommandMessages();
     }
 
     @ConfigSerializable
     public static class Description {
-        public ComponentMessage help = new ComponentMessage("Get help for FreshLib commands");
+
+        public ComponentMessage help   = new ComponentMessage("Get help for FreshLib commands");
         public ComponentMessage reload = new ComponentMessage("Reload the FreshLib configuration");
     }
 
     @ConfigSerializable
     public static class Argument {
+
         @Setting("help-query")
         public ComponentMessage helpQuery = new ComponentMessage("Help Query");
     }
 
     @ConfigSerializable
     public static class CommandMessages {
-        public Help help = new Help();
-        public Exception exception = new Exception();
+
+        public Help            help            = new Help();
+        public Exception       exception       = new Exception();
         @Setting("parser-exception")
         public ParserException parserException = new ParserException();
     }
 
     @ConfigSerializable
     public static class Help {
-        public ComponentMessage title = new ComponentMessage("FreshLib command help");
-        public ComponentMessage command = new ComponentMessage("Command");
-        public ComponentMessage description = new ComponentMessage("Description");
+
+        public ComponentMessage title                  = new ComponentMessage("FreshLib command help");
+        public ComponentMessage command                = new ComponentMessage("Command");
+        public ComponentMessage description            = new ComponentMessage("Description");
         @Setting("no-description")
-        public ComponentMessage noDescription = new ComponentMessage("No description");
-        public ComponentMessage arguments = new ComponentMessage("Arguments");
-        public ComponentMessage optional = new ComponentMessage("Optional");
+        public ComponentMessage noDescription          = new ComponentMessage("No description");
+        public ComponentMessage arguments              = new ComponentMessage("Arguments");
+        public ComponentMessage optional               = new ComponentMessage("Optional");
         @Setting("showing-results-for-query")
         public ComponentMessage showingResultsForQuery = new ComponentMessage("Showing search results for query");
         @Setting("no-results-for-query")
-        public ComponentMessage noResultsForQuery = new ComponentMessage("No results for query");
+        public ComponentMessage noResultsForQuery      = new ComponentMessage("No results for query");
         @Setting("available-commands")
-        public ComponentMessage availableCommands = new ComponentMessage("Available Commands");
+        public ComponentMessage availableCommands      = new ComponentMessage("Available Commands");
         @Setting("click-to-show-help")
-        public ComponentMessage clickToShowHelp = new ComponentMessage("Click to show help for this command");
+        public ComponentMessage clickToShowHelp        = new ComponentMessage("Click to show help for this command");
         @Setting("page-out-of-range")
-        public ComponentMessage pageOutOfRange = new ComponentMessage("Error: Page <page> is not in range. Must be in range [1, <max_pages>]");
+        public ComponentMessage pageOutOfRange         = new ComponentMessage(
+            "Error: Page <page> is not in range. Must be in range [1, <max_pages>]");
         @Setting("click-for-next-page")
-        public ComponentMessage clickForNextPage = new ComponentMessage("Click for next page");
+        public ComponentMessage clickForNextPage       = new ComponentMessage("Click for next page");
         @Setting("click-for-previous-page")
-        public ComponentMessage clickForPreviousPage = new ComponentMessage("Click for previous page");
+        public ComponentMessage clickForPreviousPage   = new ComponentMessage("Click for previous page");
 
         public ComponentMessage getMessage(String key) {
             return switch (key) {
@@ -98,30 +109,38 @@ public final class Messages implements Config {
 
     @ConfigSerializable
     public static class Exception {
+
         @Setting("command-execution")
-        public ComponentMessage commandExecution = new ComponentMessage("<red>An internal error occurred while attempting to perform this command.");
+        public ComponentMessage commandExecution  = new ComponentMessage(
+            "<red>An internal error occurred while attempting to perform this command.");
         @Setting("no-permission")
-        public ComponentMessage noPermission = new ComponentMessage("<red>I'm sorry, but you do not have permission to perform this command.\n"
+        public ComponentMessage noPermission      = new ComponentMessage(
+            "<red>I'm sorry, but you do not have permission to perform this command.\n"
                 + "Please contact the server administrators if you believe that this is in error.");
         @Setting("invalid-argument")
-        public ComponentMessage invalidArgument = new ComponentMessage("<red>Invalid command argument<white>:</white> <gray><message>");
+        public ComponentMessage invalidArgument   = new ComponentMessage(
+            "<red>Invalid command argument<white>:</white> <gray><message>");
         @Setting("invalid-sender-type")
-        public ComponentMessage invalidSenderType = new ComponentMessage("<red>Invalid command sender type. You must be of type <gray><required_sender_type></gray>.");
+        public ComponentMessage invalidSenderType = new ComponentMessage(
+            "<red>Invalid command sender type. You must be of type <gray><required_sender_type></gray>.");
         @Setting("invalid-syntax")
-        public ComponentMessage invalidSyntax = new ComponentMessage("<red>Invalid command syntax. Correct command syntax is<white>:</white> <gray><correct_syntax>");
+        public ComponentMessage invalidSyntax     = new ComponentMessage(
+            "<red>Invalid command syntax. Correct command syntax is<white>:</white> <gray><correct_syntax>");
     }
 
     @ConfigSerializable
     public static class ParserException {
-        public ComponentMessage integer = new ComponentMessage("Invalid integer: <input>");
-        public ComponentMessage number = new ComponentMessage("Invalid number: <input>");
+
+        public ComponentMessage integer  = new ComponentMessage("Invalid integer: <input>");
+        public ComponentMessage number   = new ComponentMessage("Invalid number: <input>");
         @Setting("boolean")
         public ComponentMessage boolean_ = new ComponentMessage("Invalid boolean: <input>");
         @Setting("enum")
-        public ComponentMessage enum_ = new ComponentMessage("Invalid choice: <input>. Valid choices: <choices>");
-        public ComponentMessage player = new ComponentMessage("No player found for: <input>");
-        public ComponentMessage world = new ComponentMessage("No world found for: <input>");
-        public ComponentMessage string = new ComponentMessage("'<input>' is not a valid string of type <string_mode>");
+        public ComponentMessage enum_    = new ComponentMessage("Invalid choice: <input>. Valid choices: <choices>");
+        public ComponentMessage player   = new ComponentMessage("No player found for: <input>");
+        public ComponentMessage world    = new ComponentMessage("No world found for: <input>");
+        public ComponentMessage string   = new ComponentMessage(
+            "'<input>' is not a valid string of type <string_mode>");
         public ComponentMessage progress = new ComponentMessage("Progress: <progress>");
 
         public ComponentMessage getMessage(String key) {
@@ -143,17 +162,18 @@ public final class Messages implements Config {
     // Message Types
     // -------------------------------------------------------------------------
 
-    public sealed interface Message permits StringMessage, ComponentMessage {
-    }
+    public sealed interface Message permits StringMessage, ComponentMessage {}
 
     public record StringMessage(String message) implements Message {
+
         public String withPlaceholders(final Object... keyValuePairs) {
             return Logging.replace(this.message, keyValuePairs);
         }
     }
 
     public static final class ComponentMessage implements Message, ComponentLike {
-        private final String miniMessage;
+
+        private final String                 miniMessage;
         private transient volatile Component noPlaceholders;
 
         public ComponentMessage(final String miniMessage) {
@@ -168,8 +188,8 @@ public final class Messages implements Config {
         }
 
         public Component withPlaceholders(final Iterable<TagResolver> placeholders) {
-            return Components.miniMessage(this.miniMessage,
-                    StreamSupport.stream(placeholders.spliterator(), false).toArray(TagResolver[]::new));
+            return Components.miniMessage(this.miniMessage, StreamSupport.stream(placeholders.spliterator(),
+                false).toArray(TagResolver[]::new));
         }
 
         @Override

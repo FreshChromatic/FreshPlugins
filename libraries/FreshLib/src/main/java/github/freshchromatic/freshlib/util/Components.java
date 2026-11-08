@@ -12,27 +12,24 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class Components {
+
     private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
 
     // &x&R&R&G&G&B&B / §x§R§R§G§G§B§B (Mojang RGB form)
     private static final Pattern MOJANG_HEX = Pattern.compile(
-            "(?i)[&§]x[&§]([0-9a-f])[&§]([0-9a-f])[&§]([0-9a-f])[&§]([0-9a-f])[&§]([0-9a-f])[&§]([0-9a-f])"
-    );
+        "(?i)[&§]x[&§]([0-9a-f])[&§]([0-9a-f])[&§]([0-9a-f])[&§]([0-9a-f])[&§]([0-9a-f])[&§]([0-9a-f])");
     // &#RRGGBB / §#RRGGBB
     private static final Pattern LEGACY_HASH_HEX = Pattern.compile("(?i)[&§]#([0-9a-f]{6})");
     // single-char legacy codes: &a, §l, etc.
     private static final Pattern LEGACY_SIMPLE = Pattern.compile("(?i)[&§]([0-9a-fk-or])");
 
-    private static final Map<Character, String> LEGACY_TAG_NAMES = Map.ofEntries(
-            Map.entry('0', "black"), Map.entry('1', "dark_blue"), Map.entry('2', "dark_green"),
-            Map.entry('3', "dark_aqua"), Map.entry('4', "dark_red"), Map.entry('5', "dark_purple"),
-            Map.entry('6', "gold"), Map.entry('7', "gray"), Map.entry('8', "dark_gray"),
-            Map.entry('9', "blue"), Map.entry('a', "green"), Map.entry('b', "aqua"),
-            Map.entry('c', "red"), Map.entry('d', "light_purple"), Map.entry('e', "yellow"),
-            Map.entry('f', "white"), Map.entry('k', "obfuscated"), Map.entry('l', "bold"),
-            Map.entry('m', "strikethrough"), Map.entry('n', "underlined"), Map.entry('o', "italic"),
-            Map.entry('r', "reset")
-    );
+    private static final Map<Character, String> LEGACY_TAG_NAMES = Map.ofEntries(Map.entry('0', "black"), Map.entry('1',
+        "dark_blue"), Map.entry('2', "dark_green"), Map.entry('3', "dark_aqua"), Map.entry('4', "dark_red"), Map.entry(
+            '5', "dark_purple"), Map.entry('6', "gold"), Map.entry('7', "gray"), Map.entry('8', "dark_gray"), Map.entry(
+                '9', "blue"), Map.entry('a', "green"), Map.entry('b', "aqua"), Map.entry('c', "red"), Map.entry('d',
+                    "light_purple"), Map.entry('e', "yellow"), Map.entry('f', "white"), Map.entry('k', "obfuscated"),
+        Map.entry('l', "bold"), Map.entry('m', "strikethrough"), Map.entry('n', "underlined"), Map.entry('o', "italic"),
+        Map.entry('r', "reset"));
 
     private Components() {
     }
@@ -43,13 +40,15 @@ public final class Components {
      * deserialize correctly instead of silently dropping one syntax or the other.
      */
     public static String normalizeLegacy(final String input) {
-        if (input == null) return "";
+        if (input == null) {
+            return "";
+        }
 
         StringBuilder afterMojang = new StringBuilder();
         Matcher mojangMatcher = MOJANG_HEX.matcher(input);
         while (mojangMatcher.find()) {
             String hex = (mojangMatcher.group(1) + mojangMatcher.group(2) + mojangMatcher.group(3)
-                    + mojangMatcher.group(4) + mojangMatcher.group(5) + mojangMatcher.group(6)).toLowerCase();
+                + mojangMatcher.group(4) + mojangMatcher.group(5) + mojangMatcher.group(6)).toLowerCase();
             mojangMatcher.appendReplacement(afterMojang, Matcher.quoteReplacement("<#" + hex + ">"));
         }
         mojangMatcher.appendTail(afterMojang);
@@ -57,7 +56,8 @@ public final class Components {
         StringBuilder afterHex = new StringBuilder();
         Matcher hexMatcher = LEGACY_HASH_HEX.matcher(afterMojang.toString());
         while (hexMatcher.find()) {
-            hexMatcher.appendReplacement(afterHex, Matcher.quoteReplacement("<#" + hexMatcher.group(1).toLowerCase() + ">"));
+            hexMatcher.appendReplacement(afterHex, Matcher.quoteReplacement("<#" + hexMatcher.group(1).toLowerCase()
+                + ">"));
         }
         hexMatcher.appendTail(afterHex);
 
@@ -103,6 +103,7 @@ public final class Components {
         }
         final String content = textComponent.content();
         final TextComponent.Builder result = Component.text();
+        result.style(textComponent.style());
         final StringBuilder current = new StringBuilder();
         for (int i = 0; i < content.length(); i++) {
             final char c = content.charAt(i);
@@ -119,6 +120,7 @@ public final class Components {
         if (!current.isEmpty()) {
             result.append(Component.text(current.toString()));
         }
+        result.append(textComponent.children());
         return result.build();
     }
 }

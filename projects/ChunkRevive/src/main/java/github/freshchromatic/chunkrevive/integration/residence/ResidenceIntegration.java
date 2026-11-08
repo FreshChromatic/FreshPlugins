@@ -1,25 +1,42 @@
 package github.freshchromatic.chunkrevive.integration.residence;
 
-import com.bekvon.bukkit.residence.Residence;
 import com.bekvon.bukkit.residence.protection.ResidenceManager.ChunkRef;
+import com.bekvon.bukkit.residence.Residence;
+import github.freshchromatic.chunkrevive.api.integration.ChunkArea;
+import github.freshchromatic.chunkrevive.api.integration.IntegrationApi;
+import github.freshchromatic.chunkrevive.api.integration.MaintenanceAction;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionBatchResult;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionChange;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionChangeType;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionDecision;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionProvider;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionQuery;
+import github.freshchromatic.chunkrevive.api.integration.ProtectionRegistration;
+import github.freshchromatic.chunkrevive.api.model.ChunkKey;
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.feature.marking.MarkService;
 import github.freshchromatic.chunkrevive.integration.protection.LandProtection;
 import github.freshchromatic.chunkrevive.integration.protection.ProtectionIntegration;
-import github.freshchromatic.chunkrevive.api.integration.*;
-import github.freshchromatic.chunkrevive.api.model.ChunkKey;
+import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import org.bukkit.Bukkit;
-import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.World;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public final class ResidenceIntegration implements LandProtection, ProtectionIntegration, ProtectionProvider {
+
     private volatile ProtectionRegistration registration;
 
-    public ResidenceIntegration() {}
+    public ResidenceIntegration() {
+    }
 
     public boolean isEnabled() {
         return true;
@@ -32,8 +49,8 @@ public final class ResidenceIntegration implements LandProtection, ProtectionInt
 
     @Override
     public void registerListeners(Plugin plugin, MarkService markService) {
-        Bukkit.getPluginManager().registerEvents(
-            new ResidenceClaimListener(plugin, markService, this::notifyClaimCreated), plugin);
+        Bukkit.getPluginManager().registerEvents(new ResidenceClaimListener(plugin, markService,
+            this::notifyClaimCreated), plugin);
     }
 
     /**
@@ -53,38 +70,44 @@ public final class ResidenceIntegration implements LandProtection, ProtectionInt
      *         IGNORE_CLAIMS: all chunks in range, without querying Residence at all.
      */
     @Nullable
-    public List<int[]> resolveEffectiveChunks(String world, int minCx, int maxCx, int minCz, int maxCz,
-                                               PluginConfig.Structure.PartialClaimPolicy policy) {
+    public List<ChunkCoordinate> resolveEffectiveChunks(String world, int minCx, int maxCx, int minCz, int maxCz,
+        PluginConfig.Structure.PartialClaimPolicy policy) {
         if (policy == PluginConfig.Structure.PartialClaimPolicy.IGNORE_CLAIMS) {
-            List<int[]> all = new ArrayList<>();
-            for (int x = minCx; x <= maxCx; x++)
-                for (int z = minCz; z <= maxCz; z++)
-                    all.add(new int[]{x, z});
+            List<ChunkCoordinate> all = new ArrayList<>();
+            for (int x = minCx; x <= maxCx; x++) {
+                for (int z = minCz; z <= maxCz; z++) {
+                    all.add(new ChunkCoordinate(x, z));
+                }
+            }
             return all;
         }
 
         var w = Bukkit.getWorld(world);
-        List<int[]> unclaimed = new ArrayList<>();
+        List<ChunkCoordinate> unclaimed = new ArrayList<>();
         for (int x = minCx; x <= maxCx; x++) {
             for (int z = minCz; z <= maxCz; z++) {
                 boolean claimed = w != null && hasClaim(w, x, z);
                 if (claimed) {
-                    if (policy == PluginConfig.Structure.PartialClaimPolicy.ABORT_WHOLE) return null;
+                    if (policy == PluginConfig.Structure.PartialClaimPolicy.ABORT_WHOLE) {
+                        return null;
+                    }
                 } else {
-                    unclaimed.add(new int[]{x, z});
+                    unclaimed.add(new ChunkCoordinate(x, z));
                 }
             }
         }
         return unclaimed;
     }
 
-    @Override public String id() {
+    @Override
+    public String id() {
         return "residence";
     }
 
-    @Override public java.util.concurrent.CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
-        java.util.Map<ChunkKey, ProtectionDecision> decisions = new java.util.HashMap<>();
-        java.util.Map<ChunkKey, String> reasons = new java.util.HashMap<>();
+    @Override
+    public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+        Map<ChunkKey, ProtectionDecision> decisions = new HashMap<>();
+        Map<ChunkKey, String> reasons = new HashMap<>();
         for (ChunkKey chunk : query.chunks()) {
             World world = Bukkit.getWorld(chunk.world());
             if (world != null && hasClaim(world, chunk.x(), chunk.z())) {
@@ -94,7 +117,7 @@ public final class ResidenceIntegration implements LandProtection, ProtectionInt
                 decisions.put(chunk, ProtectionDecision.ABSTAIN);
             }
         }
-        return java.util.concurrent.CompletableFuture.completedFuture(new ProtectionBatchResult(decisions, reasons));
+        return CompletableFuture.completedFuture(new ProtectionBatchResult(decisions, reasons));
     }
 
     @Override
@@ -104,9 +127,10 @@ public final class ResidenceIntegration implements LandProtection, ProtectionInt
 
     private void notifyClaimCreated(String world, int minCx, int maxCx, int minCz, int maxCz) {
         ProtectionRegistration current = registration;
-        if (current != null) current.notifyChanged(new ProtectionChange(
-            ProtectionChangeType.CREATED,
-            java.util.Optional.of(new ChunkArea(world, minCx, maxCx, minCz, maxCz))));
+        if (current != null) {
+            current.notifyChanged(new ProtectionChange(ProtectionChangeType.CREATED, Optional.of(new ChunkArea(world,
+                minCx, maxCx, minCz, maxCz))));
+        }
     }
 
 }

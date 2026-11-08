@@ -8,21 +8,23 @@ import com.bekvon.bukkit.residence.protection.CuboidArea;
 import github.freshchromatic.chunkrevive.feature.marking.MarkService;
 import github.freshchromatic.freshlib.scheduler.Scheduler;
 import github.freshchromatic.freshlib.util.Logging;
+import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
-import java.util.function.Consumer;
+import java.util.concurrent.Executor;
 
 /** Removes existing ChunkRevive marks once a new Residence claim becomes effective. */
 public final class ResidenceClaimListener implements Listener {
 
-    private final Plugin plugin;
-    private final MarkService markService;
+    private final Plugin        plugin;
+    private final MarkService   markService;
     private final ClaimNotifier notifier;
 
     @FunctionalInterface
     public interface ClaimNotifier {
+
         void notify(String world, int minCx, int maxCx, int minCz, int maxCz);
     }
 
@@ -53,8 +55,10 @@ public final class ResidenceClaimListener implements Listener {
     }
 
     private void queueUnmark(CuboidArea area) {
-        if (area == null || area.getWorldName() == null
-            || area.getLowVector() == null || area.getHighVector() == null) return;
+        if (area == null || area.getWorldName() == null || area.getLowVector() == null
+            || area.getHighVector() == null) {
+            return;
+        }
 
         String world = area.getWorldName();
         int minCx = area.getLowVector().getBlockX() >> 4;
@@ -62,15 +66,20 @@ public final class ResidenceClaimListener implements Listener {
         int minCz = area.getLowVector().getBlockZ() >> 4;
         int maxCz = area.getHighVector().getBlockZ() >> 4;
 
+        notifier.notify(world, minCx, maxCx, minCz, maxCz);
         // Residence fires these cancellable events immediately before committing its indexes.
         // Defer one tick so marks disappear only after the claim has actually become effective.
+        Executor stateExecutor = task -> Bukkit.getGlobalRegionScheduler().execute(plugin, task);
         Scheduler.runTask(plugin, () -> {
-            int removed = markService.unmarkArea(world, minCx, maxCx, minCz, maxCz);
-            if (removed > 0) {
-                Logging.logger().info("Removed " + removed + " pending ChunkRevive mark(s) covered by a new Residence in "
-                    + world + " [" + minCx + "," + minCz + " -> " + maxCx + "," + maxCz + "].");
-            }
-            notifier.notify(world, minCx, maxCx, minCz, maxCz);
+            markService.unmarkArea(world, minCx, maxCx, minCz, maxCz).whenCompleteAsync((removed, failure) -> {
+                if (failure != null) {
+                    Logging.logger().severe("Failed to persist mark removal for Residence in " + world, failure);
+                } else if (removed > 0) {
+                    Logging.logger().info("Removed " + removed
+                        + " pending ChunkRevive mark(s) covered by a new Residence in " + world + " [" + minCx + ","
+                        + minCz + " -> " + maxCx + "," + maxCz + "].");
+                }
+            }, stateExecutor);
         });
     }
 }

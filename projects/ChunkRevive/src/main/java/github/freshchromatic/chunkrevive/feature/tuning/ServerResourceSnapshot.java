@@ -2,16 +2,9 @@ package github.freshchromatic.chunkrevive.feature.tuning;
 
 import java.lang.management.ManagementFactory;
 
-public record ServerResourceSnapshot(
-    int logicalProcessors,
-    long maxHeapMiB,
-    long usedHeapMiB,
-    long totalSystemMemoryMiB,
-    long freeSystemMemoryMiB,
-    int jvmThreadCount,
-    double systemCpuLoad,
-    boolean folia
-) {
+public record ServerResourceSnapshot(int logicalProcessors, long maxHeapMiB, long usedHeapMiB,
+    long totalSystemMemoryMiB, long freeSystemMemoryMiB, int jvmThreadCount, double systemCpuLoad, boolean folia) {
+
     private static final long MIB = 1024L * 1024L;
 
     public static ServerResourceSnapshot capture(boolean folia) {
@@ -26,20 +19,13 @@ public record ServerResourceSnapshot(
                 freeSystem = os.getFreeMemorySize() / MIB;
                 cpuLoad = os.getCpuLoad();
             }
-        } catch (Throwable ignored) {
+        } catch (RuntimeException | LinkageError ignored) {
             // Some JVMs do not expose the extended operating-system bean.
         }
 
-        return new ServerResourceSnapshot(
-            runtime.availableProcessors(),
-            runtime.maxMemory() / MIB,
-            (runtime.totalMemory() - runtime.freeMemory()) / MIB,
-            totalSystem,
-            freeSystem,
-            ManagementFactory.getThreadMXBean().getThreadCount(),
-            cpuLoad,
-            folia
-        );
+        return new ServerResourceSnapshot(runtime.availableProcessors(), runtime.maxMemory() / MIB,
+            (runtime.totalMemory() - runtime.freeMemory()) / MIB, totalSystem, freeSystem,
+            ManagementFactory.getThreadMXBean().getThreadCount(), cpuLoad, folia);
     }
 
     public double heapUsageRatio() {

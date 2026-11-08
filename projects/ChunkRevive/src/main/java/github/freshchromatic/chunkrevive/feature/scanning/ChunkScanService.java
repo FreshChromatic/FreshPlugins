@@ -8,9 +8,6 @@ import github.freshchromatic.chunkrevive.nms.BiomeMatchMode;
 import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.nms.ChunkStage;
 import github.freshchromatic.chunkrevive.nms.WorldScanGateway;
-import github.freshchromatic.chunkrevive.feature.scanning.BiomeMatcher;
-import github.freshchromatic.chunkrevive.feature.scanning.BiomeRegionService;
-import github.freshchromatic.chunkrevive.feature.scanning.DiskChunkScanner;
 import org.bukkit.World;
 
 import java.util.ArrayList;
@@ -25,25 +22,23 @@ import java.util.function.Supplier;
 
 /** Reusable disk-scan and biome-detection application workflows. */
 public final class ChunkScanService {
+
     public record BiomeIds(Set<String> resolved, List<String> invalid) {}
+
     public record BiomeDetection(String biomeId, BiomeRegionService.DetectResult result) {}
-    private record BiomeDetectionKey(String world, int cx, int cz, String biomeId,
-                                     ChunkStage minimumStage, int maxChunks) {}
 
-    private final MarkRegistry markRegistry;
-    private final DiskChunkScanner scanner;
-    private final WorldScanGateway worldScan;
-    private final Supplier<PluginConfig> config;
-    private final ProtectedMarkExecutor protectedMarks;
-    private final ConcurrentHashMap<BiomeDetectionKey, CompletableFuture<BiomeDetection>>
-        biomeDetections = new ConcurrentHashMap<>();
+    private record BiomeDetectionKey(String world, int cx, int cz, String biomeId, ChunkStage minimumStage,
+        int maxChunks) {}
 
-    public ChunkScanService(
-            MarkRegistry markRegistry,
-            DiskChunkScanner scanner,
-            WorldScanGateway worldScan,
-            Supplier<PluginConfig> config,
-            ProtectedMarkExecutor protectedMarks) {
+    private final MarkRegistry                                                            markRegistry;
+    private final DiskChunkScanner                                                        scanner;
+    private final WorldScanGateway                                                        worldScan;
+    private final Supplier<PluginConfig>                                                  config;
+    private final ProtectedMarkExecutor                                                   protectedMarks;
+    private final ConcurrentHashMap<BiomeDetectionKey, CompletableFuture<BiomeDetection>> biomeDetections = new ConcurrentHashMap<>();
+
+    public ChunkScanService(MarkRegistry markRegistry, DiskChunkScanner scanner, WorldScanGateway worldScan,
+        Supplier<PluginConfig> config, ProtectedMarkExecutor protectedMarks) {
         this.markRegistry = markRegistry;
         this.scanner = scanner;
         this.worldScan = worldScan;
@@ -51,10 +46,8 @@ public final class ChunkScanService {
         this.protectedMarks = protectedMarks;
     }
 
-    public CompletableFuture<DiskChunkScanner.ScanResult> scan(
-            World world,
-            DiskChunkScanner.ScanArea area,
-            DiskChunkScanner.BiomeFilter biomeFilter) {
+    public CompletableFuture<DiskChunkScanner.ScanResult> scan(World world, DiskChunkScanner.ScanArea area,
+        DiskChunkScanner.BiomeFilter biomeFilter) {
         return scanner.scan(world, area, biomeFilter, null);
     }
 
@@ -68,6 +61,10 @@ public final class ChunkScanService {
 
     public int countRegions(World world, DiskChunkScanner.ScanArea area) {
         return scanner.countRegionFiles(world, area);
+    }
+
+    public CompletableFuture<Integer> countRegionsAsync(World world, DiskChunkScanner.ScanArea area) {
+        return scanner.countRegionFilesAsync(world, area);
     }
 
     public Set<String> biomeIds(World world) {
@@ -84,28 +81,29 @@ public final class ChunkScanService {
         var invalid = new ArrayList<String>();
         for (String token : raw.split(",")) {
             String key = token.trim();
-            if (key.isEmpty()) continue;
-            String id = key.contains(":") ? key.toLowerCase(Locale.ROOT)
-                : "minecraft:" + key.toLowerCase(Locale.ROOT);
-            if (known.contains(id)) resolved.add(id);
-            else invalid.add(key);
+            if (key.isEmpty()) {
+                continue;
+            }
+            String id = key.contains(":") ? key.toLowerCase(Locale.ROOT) : "minecraft:" + key.toLowerCase(Locale.ROOT);
+            if (known.contains(id)) {
+                resolved.add(id);
+            } else {
+                invalid.add(key);
+            }
         }
         return new BiomeIds(Set.copyOf(resolved), List.copyOf(invalid));
     }
 
-    public CompletableFuture<BiomeDetection> detectBiomeRegion(
-            World world, int cx, int cz, String biomeId) {
+    public CompletableFuture<BiomeDetection> detectBiomeRegion(World world, int cx, int cz, String biomeId) {
         var cfg = config.get();
         ChunkStage minStatus = DiskChunkScanner.parseStatus(cfg.scan.minPersistedStatus);
         int maxChunks = cfg.biome.regen.floodFillMaxChunks;
-        var key = new BiomeDetectionKey(
-            world.getName(), cx, cz, biomeId, minStatus, maxChunks);
+        var key = new BiomeDetectionKey(world.getName(), cx, cz, biomeId, minStatus, maxChunks);
         return biomeDetections.computeIfAbsent(key, ignored -> {
             CompletableFuture<BiomeDetection> created = CompletableFuture.supplyAsync(() -> {
                 BiomeMatcher matcher = new BiomeMatcher(world, cfg.biome.heightmapTypeEnum());
                 var detector = new BiomeRegionService(world, minStatus, maxChunks);
-                var result = detector.detect(
-                    cx, cz, Set.of(biomeId), matcher, BiomeMatchMode.ANY_OF_16);
+                var result = detector.detect(cx, cz, Set.of(biomeId), matcher, BiomeMatchMode.ANY_OF_16);
                 return new BiomeDetection(biomeId, result);
             }, runnable -> Thread.ofVirtual().name("cr-biome-detect").start(runnable));
             created.whenComplete((result, failure) -> biomeDetections.remove(key, created));
@@ -119,24 +117,27 @@ public final class ChunkScanService {
         long now = System.currentTimeMillis();
         List<MarkedChunk> result = new ArrayList<>();
         for (ChunkCoordinate pos : chunks) {
-            if (checkClaims && markRegistry.getLandProtection().hasClaim(world, pos.x(), pos.z())) continue;
+            if (checkClaims && markRegistry.getLandProtection().hasClaim(world, pos.x(), pos.z())) {
+                continue;
+            }
             result.add(new MarkedChunk(world.getName(), pos.x(), pos.z(), UUID.randomUUID(), now, null, true));
         }
         return List.copyOf(result);
     }
 
     public CompletableFuture<ProtectedMarkExecutor.BatchResult> markCandidates(List<MarkedChunk> candidates) {
-        return mark(candidates, true);
+        return mark(candidates);
     }
 
     public CompletableFuture<ProtectedMarkExecutor.BatchResult> markDirect(List<MarkedChunk> candidates) {
-        return mark(candidates, false);
+        return protectedMarks.markBatchWithoutProtection(candidates);
     }
 
-    private CompletableFuture<ProtectedMarkExecutor.BatchResult> mark(List<MarkedChunk> candidates, boolean batch) {
-        if (config.get().landProtection.scanClaims) return protectedMarks.markBatch(candidates, batch);
-        List<MarkedChunk> added = batch ? markRegistry.markChunksBatch(candidates) : markRegistry.markChunksDirect(candidates);
-        return CompletableFuture.completedFuture(new ProtectedMarkExecutor.BatchResult(List.copyOf(candidates), added));
+    private CompletableFuture<ProtectedMarkExecutor.BatchResult> mark(List<MarkedChunk> candidates) {
+        if (config.get().landProtection.scanClaims) {
+            return protectedMarks.markBatch(candidates);
+        }
+        return protectedMarks.markBatchWithoutProtection(candidates);
     }
 
     public boolean isRegenerationRunning() {

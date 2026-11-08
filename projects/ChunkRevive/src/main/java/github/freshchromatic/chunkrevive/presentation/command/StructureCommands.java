@@ -21,18 +21,16 @@ import java.util.function.BiConsumer;
 
 /** Handles structure inspection, protection state and forced regeneration. */
 public final class StructureCommands {
+
     private static final int PAGE_SIZE = 8;
 
-    private final StructureService structureService;
-    private final Plugin plugin;
+    private final StructureService                               structureService;
+    private final Plugin                                         plugin;
     private final BiConsumer<Commander, Collection<MarkedChunk>> bulkReset;
-    private Messages messages;
+    private Messages                                             messages;
 
-    public StructureCommands(
-            Plugin plugin,
-            StructureService structureService,
-            BiConsumer<Commander, Collection<MarkedChunk>> bulkReset,
-            Messages messages) {
+    public StructureCommands(Plugin plugin, StructureService structureService,
+        BiConsumer<Commander, Collection<MarkedChunk>> bulkReset, Messages messages) {
         this.plugin = plugin;
         this.structureService = structureService;
         this.bulkReset = bulkReset;
@@ -50,24 +48,26 @@ public final class StructureCommands {
         var player = sender.player();
         String world = player.getWorld().getName();
         if (!structureService.canAutoDetect(world)) {
-            sender.sendMessage(messages.scan.worldNotAllowed.withPlaceholders(
-                Components.placeholder("world", world)));
+            sender.sendMessage(messages.scan.worldNotAllowed.withPlaceholders(Components.placeholder("world", world)));
             return;
         }
 
         var location = player.getLocation();
-        structureService.detectAndRegister(player.getWorld(), location.getBlockX(), location.getBlockZ(), player.getUniqueId())
-            .whenComplete((detections, failure) -> Scheduler.runTask(plugin, () -> {
-                if (!player.isOnline()) return;
+        structureService.detectAndRegister(player.getWorld(), location.getBlockX(), location.getBlockZ(),
+            player.getUniqueId()).whenComplete((detections, failure) -> Scheduler.runTask(plugin, () -> {
+                if (!player.isOnline()) {
+                    return;
+                }
                 if (failure != null) {
                     plugin.getLogger().warning("Structure protection check failed: " + failure.getMessage());
-                    sender.sendMessage(Component.text(messages.text("structure-claim-blocked")).color(AdminTuiBuilder.SEVERE));
+                    sender.sendMessage(Component.text(messages.text("structure-claim-blocked")).color(
+                        AdminTuiBuilder.SEVERE));
                 } else if (detections.isEmpty()) {
                     sender.sendMessage(messages.structure.checkOutside.asComponent());
                 } else {
                     for (var detection : detections) {
-                        sender.sendMessage(messages.structure.detected.withPlaceholders(
-                            Components.placeholder("structure_name", StructureRegistry.displayName(detection.structureId())),
+                        sender.sendMessage(messages.structure.detected.withPlaceholders(Components.placeholder(
+                            "structure_name", StructureRegistry.displayName(detection.structureId())),
                             Components.placeholder("count", String.valueOf(detection.newlyMarked()))));
                     }
                 }
@@ -87,17 +87,15 @@ public final class StructureCommands {
         }
 
         var g = group.get();
-        ctx.sender().sendMessage(messages.structure.checkInside.withPlaceholders(
-            Components.placeholder("structure_name", StructureRegistry.displayName(g.structureId())),
-            Components.placeholder("cx_cz", "CX %d / CZ %d".formatted(cx, cz)),
-            Components.placeholder("range", g.rangeDisplay())));
+        ctx.sender().sendMessage(messages.structure.checkInside.withPlaceholders(Components.placeholder(
+            "structure_name", StructureRegistry.displayName(g.structureId())), Components.placeholder("cx_cz",
+                "CX %d / CZ %d".formatted(cx, cz)), Components.placeholder("range", g.rangeDisplay())));
 
         long remainingMs = Math.max(0, g.nextRefreshAt() - System.currentTimeMillis());
         String status = g.blocked() ? messages.text("structure-protected") : messages.text("structure-scheduled");
-        ctx.sender().sendMessage(messages.structure.checkRefresh.withPlaceholders(
-            Components.placeholder("days", String.valueOf(remainingMs / 86_400_000L)),
-            Components.placeholder("hours", String.valueOf((remainingMs / 3_600_000L) % 24)),
-            Components.placeholder("status", status)));
+        ctx.sender().sendMessage(messages.structure.checkRefresh.withPlaceholders(Components.placeholder("days",
+            String.valueOf(remainingMs / 86_400_000L)), Components.placeholder("hours", String.valueOf((remainingMs
+                / 3_600_000L) % 24)), Components.placeholder("status", status)));
     }
 
     public void list(CommandContext<Commander> ctx) {
@@ -123,8 +121,7 @@ public final class StructureCommands {
                 : messages.text("structure-refresh-in-days", remainingMs / 86_400_000L);
             sender.sendMessage(AdminTuiBuilder.line(messages.structure.list.entry.withPlaceholders(
                 Components.placeholder("structure_name", StructureRegistry.displayName(group.structureId())),
-                Components.placeholder("range", group.rangeDisplay()),
-                Components.placeholder("status", status))));
+                Components.placeholder("range", group.rangeDisplay()), Components.placeholder("status", status))));
         }
 
         sender.sendMessage(AdminTuiBuilder.divider());
@@ -133,30 +130,35 @@ public final class StructureCommands {
     public void refresh(CommandContext<Commander> ctx) {
         var sender = ctx.sender();
         UUID groupId = parseGroupId(sender, ctx.get("groupId"));
-        if (groupId == null) return;
+        if (groupId == null) {
+            return;
+        }
         regenerate(sender, groupId);
     }
 
     /** Shared by `/cr struct refresh <groupId>` and `/cr regen structure`. */
     public void regenerate(Commander sender, UUID groupId) {
-        structureService.prepareRegeneration(groupId).whenComplete((target, failure) -> {
-            if (failure != null) {
-                plugin.getLogger().warning("Structure protection check failed: " + failure.getMessage());
-                sender.sendMessage(Component.text(messages.text("structure-claim-blocked")).color(AdminTuiBuilder.SEVERE));
-                return;
-            }
-            finishRegeneration(sender, target);
-        });
+        structureService.prepareRegeneration(groupId).whenComplete((target, failure) -> Scheduler.runTask(plugin,
+            () -> {
+                if (failure != null) {
+                    plugin.getLogger().warning("Structure protection check failed: " + failure.getMessage());
+                    CommandMessageRouter.send(plugin, sender, Component.text(messages.text(
+                        "structure-claim-blocked")).color(AdminTuiBuilder.SEVERE));
+                    return;
+                }
+                finishRegeneration(sender, target);
+            }));
     }
 
     private void finishRegeneration(Commander sender, StructureService.RegenerationTarget target) {
         if (target.status() != StructureService.RegenerationStatus.READY) {
-            sender.sendMessage(switch (target.status()) {
+            CommandMessageRouter.send(plugin, sender, switch (target.status()) {
                 case REGEN_BUSY -> Component.text(messages.text("regen-busy")).color(AdminTuiBuilder.SEVERE);
                 case NOT_FOUND -> Component.text(messages.text("structure-not-found")).color(AdminTuiBuilder.SEVERE);
-                case WORLD_NOT_ALLOWED -> messages.scan.worldNotAllowed.withPlaceholders(
-                    Components.placeholder("world", target.group().world()));
-                case CLAIM_BLOCKED -> Component.text(messages.text("structure-claim-blocked")).color(AdminTuiBuilder.SEVERE);
+                case WORLD_NOT_ALLOWED -> messages.scan.worldNotAllowed.withPlaceholders(Components.placeholder("world",
+                    target.group().world()));
+                case CLAIM_BLOCKED -> Component.text(messages.text("structure-claim-blocked")).color(
+                    AdminTuiBuilder.SEVERE);
                 case READY -> Component.empty();
             });
             return;
@@ -164,7 +166,7 @@ public final class StructureCommands {
         var g = target.group();
         var chunks = target.chunks();
 
-        sender.sendMessage(messages.structure.refreshStart.withPlaceholders(
+        CommandMessageRouter.send(plugin, sender, messages.structure.refreshStart.withPlaceholders(
             Components.placeholder("structure_name", StructureRegistry.displayName(g.structureId())),
             Components.placeholder("count", String.valueOf(chunks.size()))));
 
@@ -174,45 +176,66 @@ public final class StructureCommands {
     public void unblock(CommandContext<Commander> ctx) {
         var sender = ctx.sender();
         UUID groupId = parseGroupId(sender, ctx.get("groupId"));
-        if (groupId == null) return;
+        if (groupId == null) {
+            return;
+        }
 
-        boolean ok = structureService.unblock(groupId);
-        sender.sendMessage(ok
-            ? Component.text(messages.text("structure-unblocked")).color(AdminTuiBuilder.NORMAL)
-            : Component.text(messages.text("structure-not-found")).color(AdminTuiBuilder.SEVERE));
+        sendMutationResult(sender, structureService.unblock(groupId), "structure-unblocked");
     }
 
     public void block(CommandContext<Commander> ctx) {
         var sender = ctx.sender();
         UUID groupId = parseGroupId(sender, ctx.get("groupId"));
-        if (groupId == null) return;
+        if (groupId == null) {
+            return;
+        }
 
-        boolean ok = structureService.block(groupId);
-        sender.sendMessage(ok
-            ? Component.text(messages.text("structure-blocked")).color(AdminTuiBuilder.NORMAL)
-            : Component.text(messages.text("structure-not-found")).color(AdminTuiBuilder.SEVERE));
+        sendMutationResult(sender, structureService.block(groupId), "structure-blocked");
     }
 
     public void reset(CommandContext<Commander> ctx) {
         var sender = ctx.sender();
         UUID groupId = parseGroupId(sender, ctx.get("groupId"));
-        if (groupId == null) return;
+        if (groupId == null) {
+            return;
+        }
 
-        boolean ok = structureService.reset(groupId);
-        sender.sendMessage(ok
-            ? Component.text(messages.text("structure-reset")).color(AdminTuiBuilder.NORMAL)
-            : Component.text(messages.text("structure-not-found")).color(AdminTuiBuilder.SEVERE));
+        sendMutationResult(sender, structureService.reset(groupId), "structure-reset");
     }
 
     public void resetAll(CommandContext<Commander> ctx, boolean confirmed) {
         var sender = ctx.sender();
         if (confirmed) {
-            int size = structureService.resetAll();
-            sender.sendMessage(Component.text(messages.text("structure-reset-all", size)).color(AdminTuiBuilder.NORMAL));
+            structureService.resetAll().whenComplete((size, failure) -> Scheduler.runTask(plugin, () -> {
+                if (failure != null) {
+                    CommandMessageRouter.send(plugin, sender, persistenceFailureMessage());
+                    return;
+                }
+                CommandMessageRouter.send(plugin, sender, Component.text(messages.text("structure-reset-all",
+                    size)).color(AdminTuiBuilder.NORMAL));
+            }));
             return;
         }
 
-        sender.sendMessage(Component.text(messages.text("structure-reset-all-confirm")).color(net.kyori.adventure.text.format.TextColor.color(0xFFAA00)));
+        sender.sendMessage(Component.text(messages.text("structure-reset-all-confirm")).color(
+            net.kyori.adventure.text.format.TextColor.color(0xFFAA00)));
+    }
+
+    private void sendMutationResult(Commander sender, java.util.concurrent.CompletableFuture<Boolean> mutation,
+        String successMessage) {
+        mutation.whenComplete((changed, failure) -> Scheduler.runTask(plugin, () -> {
+            if (failure != null) {
+                CommandMessageRouter.send(plugin, sender, persistenceFailureMessage());
+                return;
+            }
+            CommandMessageRouter.send(plugin, sender, changed ? Component.text(messages.text(successMessage)).color(
+                AdminTuiBuilder.NORMAL)
+                : Component.text(messages.text("structure-not-found")).color(AdminTuiBuilder.SEVERE));
+        }));
+    }
+
+    private Component persistenceFailureMessage() {
+        return Component.text(messages.text("structure-persistence-failed")).color(AdminTuiBuilder.SEVERE);
     }
 
     private UUID parseGroupId(Commander sender, String raw) {
@@ -223,6 +246,5 @@ public final class StructureCommands {
             return null;
         }
     }
-
 
 }

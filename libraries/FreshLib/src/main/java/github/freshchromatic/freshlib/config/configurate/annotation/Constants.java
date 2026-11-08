@@ -24,7 +24,7 @@ import java.lang.annotation.Target;
  * }</pre></p>
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.FIELD})
+@Target({ ElementType.TYPE, ElementType.FIELD })
 public @interface Constants {
 
     /**

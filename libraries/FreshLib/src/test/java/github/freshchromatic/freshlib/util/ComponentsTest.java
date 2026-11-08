@@ -1,6 +1,8 @@
 package github.freshchromatic.freshlib.util;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.junit.jupiter.api.Test;
 
@@ -33,7 +35,22 @@ class ComponentsTest {
         String input = "<#9DAFFF><bold>功能分類";
         Component component = Components.miniMessage(input);
         String reserialized = MiniMessage.miniMessage().serialize(component);
-        assertTrue(reserialized.toLowerCase().contains("9dafff"), "plain MiniMessage input should pass through unchanged: " + reserialized);
+        assertTrue(reserialized.toLowerCase().contains("9dafff"),
+            "plain MiniMessage input should pass through unchanged: " + reserialized);
         assertTrue(reserialized.contains("功能分類"), "plain text content should be preserved: " + reserialized);
+    }
+
+    @Test
+    void highlightingPreservesSourceStyleAndChildren() {
+        Component child = Component.text(" tail").decorate(TextDecoration.BOLD);
+        Component source = Component.text("Use <x>").color(NamedTextColor.GREEN).append(child);
+
+        Component highlighted = Components.highlightSpecialCharacters(source, NamedTextColor.RED);
+
+        assertTrue(highlighted.color() == NamedTextColor.GREEN);
+        assertTrue(highlighted.children().contains(child));
+        assertTrue(highlighted.children()
+            .stream()
+            .anyMatch(part -> part.equals(Component.text('<').color(NamedTextColor.RED))));
     }
 }

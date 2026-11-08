@@ -1,5 +1,6 @@
 package github.freshchromatic.chunkrevive.integration.protection;
 
+import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.api.integration.IntegrationApi;
 import github.freshchromatic.chunkrevive.api.integration.ProtectionProvider;
 import github.freshchromatic.chunkrevive.config.PluginConfig;
@@ -13,11 +14,12 @@ import java.util.List;
 import java.util.function.Supplier;
 
 public final class CombinedProtectionIntegration implements ProtectionIntegration, LandProtection {
-    private final List<ProtectionIntegration> integrations;
+
+    private final List<ProtectionIntegration>           integrations;
     private final Supplier<PluginConfig.LandProtection> config;
 
     public CombinedProtectionIntegration(List<ProtectionIntegration> integrations,
-                                         Supplier<PluginConfig.LandProtection> config) {
+        Supplier<PluginConfig.LandProtection> config) {
         this.integrations = List.copyOf(integrations);
         this.config = config;
     }
@@ -48,15 +50,15 @@ public final class CombinedProtectionIntegration implements ProtectionIntegratio
     }
 
     @Override
-    public List<int[]> resolveEffectiveChunks(String world, int minX, int maxX, int minZ, int maxZ,
-                                               PluginConfig.Structure.PartialClaimPolicy defaultPolicy) {
+    public List<ChunkCoordinate> resolveEffectiveChunks(String world, int minX, int maxX, int minZ, int maxZ,
+        PluginConfig.Structure.PartialClaimPolicy defaultPolicy) {
         World bukkitWorld = Bukkit.getWorld(world);
         return resolveEffectiveChunks(bukkitWorld, minX, maxX, minZ, maxZ, defaultPolicy);
     }
 
-    List<int[]> resolveEffectiveChunks(World bukkitWorld, int minX, int maxX, int minZ, int maxZ,
-                                       PluginConfig.Structure.PartialClaimPolicy defaultPolicy) {
-        List<int[]> result = new ArrayList<>();
+    List<ChunkCoordinate> resolveEffectiveChunks(World bukkitWorld, int minX, int maxX, int minZ, int maxZ,
+        PluginConfig.Structure.PartialClaimPolicy defaultPolicy) {
+        List<ChunkCoordinate> result = new ArrayList<>();
         PluginConfig.LandProtection current = config.get();
         for (int x = minX; x <= maxX; x++) {
             for (int z = minZ; z <= maxZ; z++) {
@@ -65,11 +67,17 @@ public final class CombinedProtectionIntegration implements ProtectionIntegratio
                     String id = ((ProtectionProvider) integration).id();
                     PluginConfig.Structure.PartialClaimPolicy policy = current.policy(id, defaultPolicy);
                     if (policy == PluginConfig.Structure.PartialClaimPolicy.IGNORE_CLAIMS || bukkitWorld == null
-                            || !integration.landProtection().hasClaim(bukkitWorld, x, z)) continue;
-                    if (policy == PluginConfig.Structure.PartialClaimPolicy.ABORT_WHOLE) return null;
+                        || !integration.landProtection().hasClaim(bukkitWorld, x, z)) {
+                        continue;
+                    }
+                    if (policy == PluginConfig.Structure.PartialClaimPolicy.ABORT_WHOLE) {
+                        return null;
+                    }
                     excluded = true;
                 }
-                if (!excluded) result.add(new int[]{x, z});
+                if (!excluded) {
+                    result.add(new ChunkCoordinate(x, z));
+                }
             }
         }
         return result;

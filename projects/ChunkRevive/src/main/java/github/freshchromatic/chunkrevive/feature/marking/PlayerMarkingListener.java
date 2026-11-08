@@ -1,12 +1,12 @@
 package github.freshchromatic.chunkrevive.feature.marking;
 
-import github.freshchromatic.chunkrevive.feature.marking.MarkService;
 import github.freshchromatic.chunkrevive.feature.structure.StructureService;
 import github.freshchromatic.chunkrevive.config.Messages;
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.feature.structure.StructureRegistry;
 import github.freshchromatic.freshlib.scheduler.Scheduler;
 import github.freshchromatic.freshlib.util.Components;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -23,19 +23,17 @@ import java.util.function.Supplier;
 
 public final class PlayerMarkingListener implements Listener {
 
-    private final MarkService markService;
-    private final Supplier<Messages> messages;
+    private final MarkService            markService;
+    private final Supplier<Messages>     messages;
     private final Supplier<PluginConfig> config;
-    private final StructureService structureService;
-    private final Plugin plugin;
+    private final StructureService       structureService;
+    private final Plugin                 plugin;
 
     // Last known chunk coords per player for change detection
     private final Map<UUID, long[]> lastChunk = new ConcurrentHashMap<>();
 
-    public PlayerMarkingListener(MarkService markService,
-                                Supplier<Messages> messages,
-                                Supplier<PluginConfig> config, StructureService structureService,
-                                Plugin plugin) {
+    public PlayerMarkingListener(MarkService markService, Supplier<Messages> messages, Supplier<PluginConfig> config,
+        StructureService structureService, Plugin plugin) {
         this.markService = markService;
         this.messages = messages;
         this.config = config;
@@ -52,8 +50,10 @@ public final class PlayerMarkingListener implements Listener {
         int newCZ = to.getBlockZ() >> 4;
 
         long[] last = lastChunk.get(player.getUniqueId());
-        if (last != null && last[0] == newCX && last[1] == newCZ) return;
-        lastChunk.put(player.getUniqueId(), new long[]{newCX, newCZ});
+        if (last != null && last[0] == newCX && last[1] == newCZ) {
+            return;
+        }
+        lastChunk.put(player.getUniqueId(), new long[] { newCX, newCZ });
 
         String world = to.getWorld().getName();
 
@@ -62,7 +62,9 @@ public final class PlayerMarkingListener implements Listener {
             switch (mode) {
                 case MARK -> {
                     markService.markAsync(world, newCX, newCZ, player.getUniqueId()).whenComplete((result, failure) -> {
-                        if (failure != null || result == MarkService.MarkStatus.CLAIM_BLOCKED) {
+                        if (failure != null) {
+                            plugin.getLogger().warning("Failed to save follow mark: " + failure.getMessage());
+                        } else if (result == MarkService.MarkStatus.CLAIM_BLOCKED) {
                             Scheduler.runTask(plugin, () -> {
                                 var mc = new MarkedChunk(world, newCX, newCZ, player.getUniqueId(), 0);
                                 player.sendMessage(messages.get().mark.residenceBlocked.withPlaceholders(
@@ -73,12 +75,21 @@ public final class PlayerMarkingListener implements Listener {
                 }
                 case UNMARK -> {
                     if (markService.isMarked(world, newCX, newCZ)) {
-                        boolean removed = markService.unmark(world, newCX, newCZ, player.getUniqueId());
-                        if (removed) {
-                            var mc = new github.freshchromatic.chunkrevive.feature.marking.MarkedChunk(world, newCX, newCZ, player.getUniqueId(), 0);
-                            player.sendMessage(messages.get().unmark.success.withPlaceholders(
-                                Components.placeholder("cx_cz", mc.coordDisplay())));
-                        }
+                        Bukkit.getGlobalRegionScheduler().execute(plugin, () -> markService.unmarkPersisted(world,
+                            newCX, newCZ).whenComplete((removed, failure) -> {
+                                if (failure != null) {
+                                    plugin.getLogger().warning("Failed to save follow unmark: " + failure.getMessage());
+                                    return;
+                                }
+                                removed.ifPresent(chunk -> Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                                    markService.refreshUnmarkedDisplay(chunk);
+                                    Scheduler.runTask(plugin, () -> {
+                                        var mc = new MarkedChunk(world, newCX, newCZ, player.getUniqueId(), 0);
+                                        player.sendMessage(messages.get().unmark.success.withPlaceholders(
+                                            Components.placeholder("cx_cz", mc.coordDisplay())));
+                                    }, player);
+                                }));
+                            }));
                     }
                 }
             }
@@ -91,15 +102,15 @@ public final class PlayerMarkingListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        Scheduler.runTaskLater(
-            plugin, () -> detectStructuresAtCurrentLocation(player), 1L, player);
+        Scheduler.runTaskLater(plugin, () -> detectStructuresAtCurrentLocation(player), 1L, player);
     }
 
     public void detectStructuresAtCurrentLocation(Player player) {
-        if (!player.isOnline()) return;
+        if (!player.isOnline()) {
+            return;
+        }
         var location = player.getLocation();
-        detectStructures(player, location.getWorld().getName(),
-            location.getBlockX(), location.getBlockZ());
+        detectStructures(player, location.getWorld().getName(), location.getBlockX(), location.getBlockZ());
     }
 
     private void detectStructures(Player player, String world, int blockX, int blockZ) {
@@ -107,20 +118,23 @@ public final class PlayerMarkingListener implements Listener {
         var currentConfig = config.get();
         if (currentConfig.structure.enabled && currentConfig.structure.detect.autoDetectOnWalk
             && structureService.canAutoDetect(world)) {
-            structureService.detectAndRegister(player.getWorld(), blockX, blockZ, player.getUniqueId())
-                .whenComplete((detections, failure) -> {
+            structureService.detectAndRegister(player.getWorld(), blockX, blockZ, player.getUniqueId()).whenComplete((
+                detections, failure) -> {
                     if (failure != null) {
                         plugin.getLogger().warning("Structure protection check failed: " + failure.getMessage());
                         return;
                     }
                     Scheduler.runTask(plugin, () -> {
-                        if (!player.isOnline()) return;
+                        if (!player.isOnline()) {
+                            return;
+                        }
                         for (var detection : detections) {
-                            if (currentConfig.structure.detect.notifyPlayerOnDetect
-                                    && detection.newGroup() && detection.newlyMarked() > 0) {
+                            if (currentConfig.structure.detect.notifyPlayerOnDetect && detection.newGroup()
+                                && detection.newlyMarked() > 0) {
                                 player.sendMessage(messages.get().structure.detected.withPlaceholders(
-                                    Components.placeholder("structure_name", StructureRegistry.displayName(detection.structureId())),
-                                    Components.placeholder("count", String.valueOf(detection.newlyMarked()))));
+                                    Components.placeholder("structure_name", StructureRegistry.displayName(
+                                        detection.structureId())), Components.placeholder("count", String.valueOf(
+                                            detection.newlyMarked()))));
                             }
                         }
                     }, player);

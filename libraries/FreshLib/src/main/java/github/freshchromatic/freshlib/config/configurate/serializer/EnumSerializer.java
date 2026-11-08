@@ -7,6 +7,7 @@ import org.spongepowered.configurate.serialize.TypeSerializer;
 
 import java.lang.reflect.Type;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -31,7 +32,7 @@ public class EnumSerializer<T extends Enum<T>> implements TypeSerializer<T> {
         }
 
         try {
-            return Enum.valueOf(enumClass, value.toUpperCase().replace("-", "_").replace(" ", "_"));
+            return Enum.valueOf(enumClass, value.toUpperCase(Locale.ROOT).replace("-", "_").replace(" ", "_"));
         } catch (IllegalArgumentException e) {
             Set<T> constants = EnumSet.allOf(enumClass);
             StringBuilder validValues = new StringBuilder();
@@ -41,10 +42,8 @@ public class EnumSerializer<T extends Enum<T>> implements TypeSerializer<T> {
                 }
                 validValues.append(constant.name());
             }
-            throw new SerializationException(
-                    "Invalid enum value '" + value + "' for " + enumClass.getSimpleName() +
-                    ". Valid values: [" + validValues + "]"
-            );
+            throw new SerializationException("Invalid enum value '" + value + "' for " + enumClass.getSimpleName()
+                + ". Valid values: [" + validValues + "]");
         }
     }
 
@@ -53,7 +52,7 @@ public class EnumSerializer<T extends Enum<T>> implements TypeSerializer<T> {
         if (obj == null) {
             node.set(null);
         } else {
-            node.set(obj.name().toLowerCase().replace("_", "-"));
+            node.set(obj.name().toLowerCase(Locale.ROOT).replace("_", "-"));
         }
     }
 }

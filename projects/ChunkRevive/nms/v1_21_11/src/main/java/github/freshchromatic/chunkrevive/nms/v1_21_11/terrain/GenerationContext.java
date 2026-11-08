@@ -12,12 +12,5 @@ import net.minecraft.world.level.levelgen.RandomState;
  * @param terrainGenerator the generator below CraftEngine's storage-injection wrapper
  * @param noiseGenerator the underlying vanilla noise generator used only by the synchronous fast path
  */
-public record GenerationContext(
-    ChunkGenerator generator,
-    ChunkGenerator terrainGenerator,
-    NoiseBasedChunkGenerator noiseGenerator,
-    RandomState randomState,
-    BiomeSource biomeSource
-) {}
-
-
+public record GenerationContext(ChunkGenerator generator, ChunkGenerator terrainGenerator,
+    NoiseBasedChunkGenerator noiseGenerator, RandomState randomState, BiomeSource biomeSource) {}

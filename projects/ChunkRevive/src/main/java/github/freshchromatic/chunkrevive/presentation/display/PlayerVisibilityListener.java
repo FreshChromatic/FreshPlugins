@@ -12,8 +12,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Tracks chunk changes for marker visibility and eye-height updates. */
 public final class PlayerVisibilityListener implements Listener {
+
     private final ChunkDisplayService displayService;
-    private final Map<UUID, long[]> lastChunk = new ConcurrentHashMap<>();
+    private final Map<UUID, long[]>   lastChunk = new ConcurrentHashMap<>();
 
     public PlayerVisibilityListener(ChunkDisplayService displayService) {
         this.displayService = displayService;
@@ -27,7 +28,7 @@ public final class PlayerVisibilityListener implements Listener {
 
         int cx = to.getBlockX() >> 4;
         int cz = to.getBlockZ() >> 4;
-        long[] previous = lastChunk.put(player.getUniqueId(), new long[]{cx, cz});
+        long[] previous = lastChunk.put(player.getUniqueId(), new long[] { cx, cz });
         if (previous == null || previous[0] != cx || previous[1] != cz) {
             displayService.refreshVisibility(player);
         }

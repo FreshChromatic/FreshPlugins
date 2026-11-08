@@ -10,6 +10,7 @@ import java.util.Map;
 
 /** ChunkRevive-specific configuration loading and YAML shorthand normalization. */
 final class ChunkReviveConfigManager extends ConfigurateConfigManager<PluginConfig> {
+
     private final String pluginVersion;
 
     ChunkReviveConfigManager(Path path, String pluginVersion) {
@@ -34,11 +35,15 @@ final class ChunkReviveConfigManager extends ConfigurateConfigManager<PluginConf
     private static void migrateLandProtection(ConfigurationNode root) {
         var oldScan = root.node("scan", "check-residence-claims");
         var newScan = root.node("land-protection", "scan-claims");
-        if (newScan.virtual() && !oldScan.virtual()) newScan.raw(oldScan.raw());
+        if (newScan.virtual() && !oldScan.virtual()) {
+            newScan.raw(oldScan.raw());
+        }
 
         var oldPolicy = root.node("structure", "residence", "on-partial-claim");
         var newPolicy = root.node("land-protection", "default-structure-policy");
-        if (newPolicy.virtual() && !oldPolicy.virtual()) newPolicy.raw(oldPolicy.raw());
+        if (newPolicy.virtual() && !oldPolicy.virtual()) {
+            newPolicy.raw(oldPolicy.raw());
+        }
     }
 
     @Override

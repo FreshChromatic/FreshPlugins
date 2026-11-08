@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ResetStrategyPlannerTest {
@@ -15,9 +16,8 @@ final class ResetStrategyPlannerTest {
     @Test
     void completeSafeRegionCanUseRegionDeletion() {
         var chunks = completeRegion("world", 2, -3);
-        var plan = ResetStrategyPlanner.plan(chunks,
-            ResetMethod.REGENERATE, ResetMethod.DELETE_REGION, ResetMethod.DELETE_CHUNK,
-            ignored -> true);
+        var plan = ResetStrategyPlanner.plan(chunks, ResetMethod.REGENERATE, ResetMethod.DELETE_REGION,
+            ResetMethod.DELETE_CHUNK, ignored -> true);
 
         assertEquals(1, plan.deleteRegions().size());
         assertTrue(plan.deleteChunks().isEmpty());
@@ -29,15 +29,13 @@ final class ResetStrategyPlannerTest {
     void unsafeOrIncompleteRegionUsesChunkFallback() {
         var chunks = completeRegion("world", 0, 0);
         chunks.removeLast();
-        var plan = ResetStrategyPlanner.plan(chunks,
-            ResetMethod.REGENERATE, ResetMethod.DELETE_REGION, ResetMethod.DELETE_CHUNK,
-            ignored -> true);
+        var plan = ResetStrategyPlanner.plan(chunks, ResetMethod.REGENERATE, ResetMethod.DELETE_REGION,
+            ResetMethod.DELETE_CHUNK, ignored -> true);
         assertEquals(1023, plan.deleteChunks().size());
         assertTrue(plan.deleteRegions().isEmpty());
 
-        plan = ResetStrategyPlanner.plan(completeRegion("world", 0, 0),
-            ResetMethod.REGENERATE, ResetMethod.DELETE_REGION, ResetMethod.DELETE_CHUNK,
-            ignored -> false);
+        plan = ResetStrategyPlanner.plan(completeRegion("world", 0, 0), ResetMethod.REGENERATE,
+            ResetMethod.DELETE_REGION, ResetMethod.DELETE_CHUNK, ignored -> false);
         assertEquals(1024, plan.deleteChunks().size());
         assertTrue(plan.deleteRegions().isEmpty());
     }
@@ -45,11 +43,41 @@ final class ResetStrategyPlannerTest {
     @Test
     void deleteRegionIsNeverAppliedToIncompleteTargets() {
         var one = List.of(chunk("world", 0, 0));
-        var plan = ResetStrategyPlanner.plan(one,
-            ResetMethod.DELETE_REGION, ResetMethod.DEFAULT, ResetMethod.DEFAULT,
+        var plan = ResetStrategyPlanner.plan(one, ResetMethod.DELETE_REGION, ResetMethod.DEFAULT, ResetMethod.DEFAULT,
             ignored -> true);
         assertEquals(1, plan.regenerateChunks().size());
         assertTrue(plan.deleteRegions().isEmpty());
+    }
+
+    @Test
+    void confirmationDependsOnDestructiveOperationsAndTargetThreshold() {
+        var target = chunk("world", 0, 0);
+        var regeneration = new ResetStrategyPlanner.Plan(List.of(), List.of(), List.of(target));
+        var chunkDeletion = new ResetStrategyPlanner.Plan(List.of(), List.of(target), List.of());
+        var regionDeletion = new ResetStrategyPlanner.Plan(List.of(new ResetStrategyPlanner.RegionTarget("world",
+            new AnvilRegionPos(0, 0))), List.of(), List.of());
+
+        assertFalse(regeneration.requiresConfirmation(1, 1));
+        assertTrue(regeneration.requiresConfirmation(2, 1));
+        assertTrue(chunkDeletion.requiresConfirmation(1, 100));
+        assertTrue(regionDeletion.requiresConfirmation(1, 100));
+    }
+
+    @Test
+    void planKeepsItsTargetsWhenInputCollectionsChange() {
+        var chunk = chunk("world", 0, 0);
+        var region = new ResetStrategyPlanner.RegionTarget("world", new AnvilRegionPos(0, 0));
+        var regions = new ArrayList<>(List.of(region));
+        var deleted = new ArrayList<>(List.of(chunk));
+        var regenerated = new ArrayList<>(List.of(chunk));
+        var plan = new ResetStrategyPlanner.Plan(regions, deleted, regenerated);
+        regions.clear();
+        deleted.clear();
+        regenerated.clear();
+
+        assertEquals(List.of(region), plan.deleteRegions());
+        assertEquals(List.of(chunk), plan.deleteChunks());
+        assertEquals(List.of(chunk), plan.regenerateChunks());
     }
 
     private static ArrayList<MarkedChunk> completeRegion(String world, int rx, int rz) {

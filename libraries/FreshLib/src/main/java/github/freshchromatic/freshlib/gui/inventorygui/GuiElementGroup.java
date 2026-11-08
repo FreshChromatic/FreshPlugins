@@ -34,10 +34,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Represents a group of multiple elements. Will be left-aligned by default.
  */
 public class GuiElementGroup extends GuiElement {
-    private List<GuiElement> elements = new CopyOnWriteArrayList<>();
-    private GuiElement filler = null;
-    private Alignment alignment = Alignment.LEFT;
-    
+
+    private List<GuiElement> elements  = new CopyOnWriteArrayList<>();
+    private GuiElement       filler    = null;
+    private Alignment        alignment = Alignment.LEFT;
+
     /**
      * A group of elements
      * @param slotChar  The character to replace in the gui setup string
@@ -72,7 +73,7 @@ public class GuiElementGroup extends GuiElement {
         }
         return null;
     }
-    
+
     @Override
     public void setGui(InventoryGui gui) {
         super.setGui(gui);
@@ -85,7 +86,7 @@ public class GuiElementGroup extends GuiElement {
             filler.setGui(gui);
         }
     }
-    
+
     @Override
     public void setSlots(int[] slots) {
         super.setSlots(slots);
@@ -100,29 +101,29 @@ public class GuiElementGroup extends GuiElement {
      * Add an element to this group
      * @param element   The element to add
      */
-    public void addElement(GuiElement element){
+    public void addElement(GuiElement element) {
         elements.add(element);
         if (element != null) {
             element.setGui(gui);
             element.setSlots(slots);
         }
     }
-    
+
     /**
      * Add elements to this group
      * @param elements  The elements to add
      */
-    public void addElements(GuiElement... elements){
+    public void addElements(GuiElement... elements) {
         for (GuiElement element : elements) {
             addElement(element);
         }
     }
-    
+
     /**
      * Add elements to this group
      * @param elements  The elements to add
      */
-    public void addElements(Collection<GuiElement> elements){
+    public void addElements(Collection<GuiElement> elements) {
         for (GuiElement element : elements) {
             addElement(element);
         }
@@ -224,7 +225,7 @@ public class GuiElementGroup extends GuiElement {
     public void clearElements() {
         elements.clear();
     }
-    
+
     /**
      * Set the filler element for empty slots
      * @param item The item for the filler element
@@ -233,7 +234,7 @@ public class GuiElementGroup extends GuiElement {
         filler = new StaticGuiElement(' ', item, " ");
         filler.setGui(gui);
     }
-    
+
     /**
      * Set the filler element for empty slots
      * @param filler The item for the filler element
@@ -244,7 +245,7 @@ public class GuiElementGroup extends GuiElement {
             filler.setGui(gui);
         }
     }
-    
+
     /**
      * Get the filler element
      * @return The filler element
@@ -278,9 +279,6 @@ public class GuiElementGroup extends GuiElement {
     }
 
     public enum Alignment {
-        LEFT,
-        CENTER,
-        RIGHT;
+        LEFT, CENTER, RIGHT;
     }
 }
-

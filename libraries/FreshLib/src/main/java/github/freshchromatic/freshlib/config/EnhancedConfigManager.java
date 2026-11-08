@@ -3,6 +3,7 @@ package github.freshchromatic.freshlib.config;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import github.freshchromatic.freshlib.config.configurate.ConfigDocGenerator;
+import github.freshchromatic.freshlib.config.configurate.ConfigFileName;
 import github.freshchromatic.freshlib.config.configurate.EnvironmentConfigManager;
 import github.freshchromatic.freshlib.config.configurate.TranslatedConfigManager;
 import github.freshchromatic.freshlib.util.Logging;
@@ -12,29 +13,16 @@ import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Enhanced configuration manager with full DiscordSRV feature parity.
- *
- * <p>
- * Features:
- * <ul>
- * <li>Multi-environment support (dev/test/staging/prod)</li>
- * <li>Automatic file watching and hot-reload</li>
- * <li>Configuration validation with detailed error reporting</li>
- * <li>Backup mechanism for safe updates</li>
- * <li>Documentation generation</li>
- * <li>Caching layer for performance</li>
- * </ul>
- * </p>
- */
 @Singleton
 public final class EnhancedConfigManager {
 
-    private final Path dataDirectory;
-    private final JavaPlugin plugin;
+    private final Path                                                                                                       dataDirectory;
+    private final JavaPlugin                                                                                                 plugin;
     private github.freshchromatic.freshlib.config.configurate.EnhancedConfigManager<FreshLibConfig, YamlConfigurationLoader> mainConfigManager;
-    private TranslatedConfigManager<Messages> messagesManager;
-    private final AtomicBoolean initialized = new AtomicBoolean(false);
+    private TranslatedConfigManager<Messages>                                                                                messagesManager;
+    private final AtomicBoolean                                                                                              initialized = new AtomicBoolean(
+        false);
+    private boolean                                                                                                          autoReloadEnabled;
 
     @Inject
     public EnhancedConfigManager(final JavaPlugin plugin) {
@@ -63,27 +51,27 @@ public final class EnhancedConfigManager {
         try {
             Path configPath = EnvironmentConfigManager.resolveConfigPath(dataDirectory, "config.yml");
 
-            mainConfigManager = new github.freshchromatic.freshlib.config.configurate.EnhancedConfigManager<FreshLibConfig, YamlConfigurationLoader>(
-                    configPath,
-                    FreshLibConfig.class) {
+            var nextConfigManager = new github.freshchromatic.freshlib.config.configurate.EnhancedConfigManager<FreshLibConfig, YamlConfigurationLoader>(
+                configPath, FreshLibConfig.class) {
+
                 @Override
                 protected String header() {
                     return buildHeader();
                 }
-
-                @Override
-                protected void validateSpecificFields(
-                        github.freshchromatic.freshlib.config.configurate.validation.ValidationResult result) {
-                    validateMainConfig(result);
-                }
             };
 
-            Path backupPath = dataDirectory.resolve("backups").resolve(
-                    "config-" + System.currentTimeMillis() + ".yml.bak");
+            Path backupPath = dataDirectory.resolve("backups").resolve("config-" + System.currentTimeMillis()
+                + ".yml.bak");
 
-            mainConfigManager.load(true, true, backupPath);
+            boolean configLoaded = nextConfigManager.tryLoad(true, true, backupPath);
+            if (!configLoaded && mainConfigManager != null) {
+                return;
+            }
 
-            FreshLibConfig config = mainConfigManager.config();
+            FreshLibConfig config = nextConfigManager.config();
+            if (config == null) {
+                return;
+            }
 
             if (config.automaticConfigurationUpgrade) {
                 Logging.logger().info("Automatic configuration upgrade is ENABLED");
@@ -93,23 +81,44 @@ public final class EnhancedConfigManager {
                 Logging.logger().warning("New configuration options will NOT be automatically added!");
             }
 
-            String langFile = config.settings.languageFile;
-            Path langPath = EnvironmentConfigManager.resolveConfigPath(
-                    dataDirectory.resolve("locale"),
-                    langFile);
+            var configuredFile = ConfigFileName.parse(config.settings.languageFile);
+            if (configuredFile.isEmpty() && messagesManager != null) {
+                return;
+            }
+            if (configuredFile.isEmpty()) {
+                Logging.logger().warning("Invalid language file name; using lang-en.yml for initial configuration");
+            }
+            ConfigFileName langFile = configuredFile.orElseGet(() -> new ConfigFileName("lang-en.yml"));
+            Path langPath = EnvironmentConfigManager.resolveConfigPath(dataDirectory.resolve("locale"), langFile);
 
-            messagesManager = new TranslatedConfigManager<>(
-                    langPath,
-                    Messages.class,
-                    "/locale/" + langFile);
-            messagesManager.load();
+            var nextMessagesManager = new TranslatedConfigManager<>(langPath, Messages.class, "/locale/"
+                + langFile.value());
+            boolean messagesLoaded = nextMessagesManager.tryLoad();
+            if (!messagesLoaded && messagesManager != null) {
+                return;
+            }
+            if (nextMessagesManager.config() == null) {
+                return;
+            }
+
+            if (mainConfigManager != null) {
+                mainConfigManager.shutdown();
+            }
+            mainConfigManager = nextConfigManager;
+            messagesManager = nextMessagesManager;
+            if (autoReloadEnabled) {
+                mainConfigManager.enableAutoReload();
+            }
 
             initialized.set(true);
-            Logging.logger().info("Configuration reloaded successfully");
+            if (configLoaded && messagesLoaded) {
+                Logging.logger().info("Configuration reloaded successfully");
+            } else {
+                Logging.logger().warning("Configuration initialized with defaults after a load failure");
+            }
 
         } catch (Exception e) {
-            Logging.logger().severe("Failed to initialize configuration: " + e.getMessage());
-            e.printStackTrace();
+            Logging.logger().severe("Failed to initialize configuration", e);
         }
     }
 
@@ -123,15 +132,11 @@ public final class EnhancedConfigManager {
         return header.toString();
     }
 
-    private void validateMainConfig(
-            github.freshchromatic.freshlib.config.configurate.validation.ValidationResult result) {
-        FreshLibConfig config = mainConfigManager.config();
-    }
-
     /**
      * Enables automatic file watching for all configurations.
      */
     public void enableAutoReload() {
+        autoReloadEnabled = true;
         if (mainConfigManager != null) {
             mainConfigManager.enableAutoReload();
         }
@@ -141,6 +146,7 @@ public final class EnhancedConfigManager {
      * Disables automatic file watching.
      */
     public void disableAutoReload() {
+        autoReloadEnabled = false;
         if (mainConfigManager != null) {
             mainConfigManager.disableAutoReload();
         }

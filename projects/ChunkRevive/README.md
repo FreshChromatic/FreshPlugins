@@ -73,6 +73,15 @@ ChunkRevive requires the following:
 
 <h2>
   <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
+  &nbsp;Persistence
+</h2>
+
+ChunkRevive uses SQLite by default and can be configured to use MySQL in `config.yml`. Deletion jobs are persisted and unfinished jobs resume after a restart when `deletion.resume-on-startup` is enabled (the default).
+
+Maintenance API operation snapshots report whether their latest state is pending, persisted, or failed to persist. If the database remains unavailable through server shutdown, the newest in-memory operation state cannot be recovered. On the next startup, any operation whose last stored state was still in progress is recorded as interrupted. Restore database connectivity before relying on operation history.
+
+<h2>
+  <img src="https://cdn.modrinth.com/data/cached_images/1eed247362ef30bae4948fd957f3ac5620351aba.png" alt="" width="37" align="absmiddle">
   &nbsp;References
 </h2>
 

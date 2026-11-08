@@ -29,11 +29,8 @@ public class ColorSerializer implements TypeSerializer<Color> {
             } else if (value.contains(",")) {
                 String[] parts = value.split(",");
                 if (parts.length == 3) {
-                    return new Color(
-                            Integer.parseInt(parts[0].trim()),
-                            Integer.parseInt(parts[1].trim()),
-                            Integer.parseInt(parts[2].trim())
-                    );
+                    return new Color(Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()),
+                        Integer.parseInt(parts[2].trim()));
                 }
             }
             throw new SerializationException("Invalid color format: " + value);

@@ -65,8 +65,10 @@ dependencies {
     implementation("com.google.code.gson:gson:2.13.2")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:6.0.3")
+    testImplementation("org.mockito:mockito-core:5.22.0")
     testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testImplementation(files(
+        "libs/Residence6.0.1.6.jar",
         "libs/Dominion-4.9.8-release-lite.jar",
         "libs/Bonfire-1.6.1.jar",
         "libs/homestead-6.0.0.1.jar"
@@ -75,6 +77,7 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.0.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.3")
     testRuntimeOnly("org.xerial:sqlite-jdbc:3.51.2.0")
+    testRuntimeOnly("com.mysql:mysql-connector-j:9.6.0")
 }
 
 tasks {

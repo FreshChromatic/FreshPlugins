@@ -1,26 +1,35 @@
 package github.freshchromatic.chunkrevive.nms.v26_3.terrain;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.util.StaticCache2D;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.chunk.status.ChunkStep;
 import net.minecraft.world.level.levelgen.RandomState;
-import org.jspecify.annotations.Nullable;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ProtoChunk;
-import java.util.Map;
+
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Field;
+import java.util.Map;
+import java.util.Objects;
+
+import sun.misc.Unsafe;
 
 /**
  * {@link WorldGenRegion} subclass that replaces the level-seed fields injected
@@ -35,46 +44,38 @@ import java.lang.reflect.Field;
  */
 final class SeededWorldGenRegion extends WorldGenRegion {
 
-    private static final sun.misc.Unsafe UNSAFE = resolveUnsafe();
-    private static final long OFFSET_SEED;
-    private static final long OFFSET_RANDOM;
-    private static final long OFFSET_BIOME_MANAGER;
+    private static final Unsafe UNSAFE = resolveUnsafe();
+    private static final long   OFFSET_SEED;
+    private static final long   OFFSET_RANDOM;
+    private static final long   OFFSET_BIOME_MANAGER;
 
     static {
         try {
-            OFFSET_SEED         = UNSAFE.objectFieldOffset(WorldGenRegion.class.getDeclaredField("seed"));
-            OFFSET_RANDOM       = UNSAFE.objectFieldOffset(WorldGenRegion.class.getDeclaredField("random"));
+            OFFSET_SEED = UNSAFE.objectFieldOffset(WorldGenRegion.class.getDeclaredField("seed"));
+            OFFSET_RANDOM = UNSAFE.objectFieldOffset(WorldGenRegion.class.getDeclaredField("random"));
             OFFSET_BIOME_MANAGER = UNSAFE.objectFieldOffset(WorldGenRegion.class.getDeclaredField("biomeManager"));
         } catch (NoSuchFieldException e) {
-            throw new ExceptionInInitializerError(
-                "SeededWorldGenRegion: WorldGenRegion field layout changed — " + e.getMessage());
+            throw new ExceptionInInitializerError("SeededWorldGenRegion: WorldGenRegion field layout changed — "
+                + e.getMessage());
         }
     }
 
-    private static final Identifier WORLDGEN_REGION_RANDOM =
-        Identifier.withDefaultNamespace("worldgen_region_random");
+    private static final Identifier WORLDGEN_REGION_RANDOM = Identifier.withDefaultNamespace("worldgen_region_random");
 
-    private final BiomeResolver biomeResolver;
+    private final BiomeResolver             biomeResolver;
     private final Map<ChunkPos, ProtoChunk> globalChunks;
-    private final ServerLevel level;
-    private final boolean structureReferenceStage;
-    private final boolean terrainStage;
+    private final ServerLevel               level;
+    private final boolean                   structureReferenceStage;
+    private final boolean                   terrainStage;
 
     private final @Nullable ProtoChunk emptyStructureContext;
 
     private final java.util.concurrent.ConcurrentMap<Holder<Biome>, ProtoChunk> carverBiomeContexts;
 
-    SeededWorldGenRegion(
-        ServerLevel level,
-        StaticCache2D<GenerationChunkHolder> cache,
-        ChunkStep step,
-        ChunkAccess center,
-        long playerSeed,
-        BiomeSource customBiomeSource,
-        RandomState customRandomState,
+    SeededWorldGenRegion(ServerLevel level, StaticCache2D<GenerationChunkHolder> cache, ChunkStep step,
+        ChunkAccess center, long playerSeed, BiomeSource customBiomeSource, RandomState customRandomState,
         Map<ChunkPos, ProtoChunk> globalChunks,
-        java.util.concurrent.ConcurrentMap<Holder<Biome>, ProtoChunk> carverBiomeContexts
-    ) {
+        java.util.concurrent.ConcurrentMap<Holder<Biome>, ProtoChunk> carverBiomeContexts) {
         super(level, cache, step, center);
         this.biomeResolver = customBiomeSource.createUncachedResolver(customRandomState);
         this.globalChunks = globalChunks;
@@ -88,25 +89,17 @@ final class SeededWorldGenRegion extends WorldGenRegion {
         // empty structure-start map. Reusing one immutable sentinel avoids allocating thousands of
         // full-height ProtoChunks (and the resulting apparent hang/GC storm) for a compact batch.
         if (this.structureReferenceStage) {
-            this.emptyStructureContext = new ProtoChunk(
-                center.getPos(),
-                net.minecraft.world.level.chunk.UpgradeData.EMPTY,
-                this.level,
-                this.level.palettedContainerFactory(),
-                null
-            );
+            this.emptyStructureContext = new ProtoChunk(center.getPos(), UpgradeData.EMPTY, this.level,
+                this.level.palettedContainerFactory(), null);
             this.emptyStructureContext.setPersistedStatus(ChunkStatus.STRUCTURE_STARTS);
         } else {
             this.emptyStructureContext = null;
         }
 
         UNSAFE.putLong(this, OFFSET_SEED, playerSeed);
-        UNSAFE.putObject(this, OFFSET_BIOME_MANAGER,
-            new BiomeManager(this, BiomeManager.obfuscateSeed(playerSeed)));
-        UNSAFE.putObject(this, OFFSET_RANDOM,
-            customRandomState
-                .getOrCreateRandomFactory(WORLDGEN_REGION_RANDOM)
-                .at(center.getPos().getWorldPosition()));
+        UNSAFE.putObject(this, OFFSET_BIOME_MANAGER, new BiomeManager(this, BiomeManager.obfuscateSeed(playerSeed)));
+        UNSAFE.putObject(this, OFFSET_RANDOM, customRandomState.getOrCreateRandomFactory(WORLDGEN_REGION_RANDOM).at(
+            center.getPos().getWorldPosition()));
     }
 
     /**
@@ -124,7 +117,7 @@ final class SeededWorldGenRegion extends WorldGenRegion {
         }
 
         if (this.structureReferenceStage) {
-            return java.util.Objects.requireNonNull(this.emptyStructureContext);
+            return Objects.requireNonNull(this.emptyStructureContext);
         }
 
         if (this.terrainStage) {
@@ -133,19 +126,11 @@ final class SeededWorldGenRegion extends WorldGenRegion {
             // a full-height ProtoChunk for every missing coordinate makes one target allocate up
             // to 289 chunks. A sentinel per biome preserves the generator's carver selection: the
             // first carverBiome(supplier) call seeds it with the settings for exactly that biome.
-            Holder<Biome> biome = this.biomeResolver.getNoiseBiome(
-                QuartPos.fromBlock(chunkX << 4),
-                0,
-                QuartPos.fromBlock(chunkZ << 4)
-            );
+            Holder<Biome> biome = this.biomeResolver.getNoiseBiome(QuartPos.fromBlock(chunkX << 4), 0,
+                QuartPos.fromBlock(chunkZ << 4));
             return this.carverBiomeContexts.computeIfAbsent(biome, ignored -> {
-                ProtoChunk fallback = new ProtoChunk(
-                    new ChunkPos(chunkX, chunkZ),
-                    net.minecraft.world.level.chunk.UpgradeData.EMPTY,
-                    this.level,
-                    this.level.palettedContainerFactory(),
-                    null
-                );
+                ProtoChunk fallback = new ProtoChunk(new ChunkPos(chunkX, chunkZ), UpgradeData.EMPTY, this.level,
+                    this.level.palettedContainerFactory(), null);
                 fallback.setPersistedStatus(ChunkStatus.BIOMES);
                 return fallback;
             });
@@ -159,13 +144,8 @@ final class SeededWorldGenRegion extends WorldGenRegion {
         // WorldGenRegion per source chunk, so a per-region cache regenerated the same biome palette
         // many times. Writable positions are already present in globalChunks before this path.
         return this.globalChunks.computeIfAbsent(requested, pos -> {
-            ProtoChunk fallback = new ProtoChunk(
-                pos,
-                net.minecraft.world.level.chunk.UpgradeData.EMPTY,
-                this.level,
-                this.level.palettedContainerFactory(),
-                null
-            );
+            ProtoChunk fallback = new ProtoChunk(pos, UpgradeData.EMPTY, this.level,
+                this.level.palettedContainerFactory(), null);
             fallback.fillBiomesFromNoise(this.biomeResolver);
             fallback.setPersistedStatus(ChunkStatus.BIOMES);
             return fallback;
@@ -178,7 +158,7 @@ final class SeededWorldGenRegion extends WorldGenRegion {
     }
 
     @Override
-    public boolean setBlock(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.state.BlockState blockState, int updateFlags, int updateLimit) {
+    public boolean setBlock(BlockPos pos, BlockState blockState, int updateFlags, int updateLimit) {
         this.getChunk(pos); // Validate/cache the destination before delegating to WorldGenRegion.
         // NmsTerrainGenerator executes FEATURES in a 3x3 colouring. Tasks in one stripe have
         // disjoint radius-one write sets, and different regen batches own different scratch maps.
@@ -187,18 +167,18 @@ final class SeededWorldGenRegion extends WorldGenRegion {
     }
 
     @Override
-    public boolean addFreshEntity(net.minecraft.world.entity.Entity entity) {
-        int xc = net.minecraft.core.SectionPos.blockToSectionCoord(entity.getBlockX());
-        int zc = net.minecraft.core.SectionPos.blockToSectionCoord(entity.getBlockZ());
+    public boolean addFreshEntity(Entity entity) {
+        int xc = SectionPos.blockToSectionCoord(entity.getBlockX());
+        int zc = SectionPos.blockToSectionCoord(entity.getBlockZ());
         this.getChunk(xc, zc); // Validate/cache the destination using the same path as block writes.
         return super.addFreshEntity(entity);
     }
 
-    private static sun.misc.Unsafe resolveUnsafe() {
+    private static Unsafe resolveUnsafe() {
         try {
-            Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            Field f = Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
-            return (sun.misc.Unsafe) f.get(null);
+            return (Unsafe) f.get(null);
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError("Cannot access sun.misc.Unsafe: " + e.getMessage());
         }

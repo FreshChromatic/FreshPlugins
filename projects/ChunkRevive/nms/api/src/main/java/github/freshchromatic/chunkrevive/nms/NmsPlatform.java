@@ -4,6 +4,7 @@ import java.util.Set;
 
 /** Entry point contributed by every shaded version adapter. */
 public interface NmsPlatform {
+
     Set<String> supportedMinecraftVersions();
 
     TerrainGateway terrain();

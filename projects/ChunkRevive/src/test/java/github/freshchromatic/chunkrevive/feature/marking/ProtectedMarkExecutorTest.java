@@ -14,9 +14,16 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ProtectedMarkExecutorTest {
+
     @Test
     void batchWaitsForProviderAndExcludesDeniedChunks() {
         var checks = new PendingChecks();
@@ -24,12 +31,12 @@ class ProtectedMarkExecutorTest {
         var executor = new ProtectedMarkExecutor(Runnable::run, registry, checks);
         var allowed = chunk(1);
         var denied = chunk(2);
-        var result = executor.markBatch(List.of(allowed, denied), true);
+        var result = executor.markBatch(List.of(allowed, denied));
 
         assertFalse(result.isDone());
         assertFalse(registry.isMarked("world", 1, 0));
-        checks.pending.complete(new ProtectionBatchResult(Map.of(new ChunkKey("world", 2, 0),
-            ProtectionDecision.DENY), Map.of()));
+        checks.pending.complete(new ProtectionBatchResult(Map.of(new ChunkKey("world", 2, 0), ProtectionDecision.DENY),
+            Map.of()));
 
         assertEquals(List.of(allowed), result.join().eligible());
         assertTrue(registry.isMarked("world", 1, 0));
@@ -41,12 +48,31 @@ class ProtectedMarkExecutorTest {
         var checks = new PendingChecks();
         var registry = registry();
         var executor = new ProtectedMarkExecutor(Runnable::run, registry, checks);
-        var result = executor.markBatch(List.of(chunk(1)), false);
+        var result = executor.markBatch(List.of(chunk(1)));
         checks.revision++;
         checks.pending.complete(new ProtectionBatchResult(Map.of(), Map.of()));
 
         assertThrows(java.util.concurrent.CompletionException.class, result::join);
         assertFalse(registry.isMarked("world", 1, 0));
+    }
+
+    @Test
+    void persistedMarkWaitsForStorageBeforeRefreshingDisplay() {
+        var checks = new ImmediateChecks();
+        var registry = mock(MarkRegistry.class);
+        var chunk = chunk(1);
+        var pending = new CompletableFuture<MarkResult>();
+        when(registry.resolveMark("world", 1, 0, chunk.markedBy())).thenReturn(List.of(chunk));
+        when(registry.markResolvedPersisted(List.of(chunk))).thenReturn(pending);
+        var executor = new ProtectedMarkExecutor(Runnable::run, registry, checks);
+
+        var result = executor.mark("world", 1, 0, chunk.markedBy());
+
+        assertFalse(result.isDone());
+        pending.complete(MarkResult.SUCCESS);
+
+        assertEquals(MarkResult.SUCCESS, result.join());
+        verify(registry).refreshMarkedDisplay("world", 1, 0);
     }
 
     private static MarkedChunk chunk(int x) {
@@ -55,26 +81,75 @@ class ProtectedMarkExecutorTest {
 
     private static MarkRegistry registry() {
         MarkStore store = new MarkStore() {
-            @Override public boolean mark(MarkedChunk chunk) { return true; }
-            @Override public void markBatch(Collection<MarkedChunk> chunks) {}
-            @Override public boolean unmark(String world, int cx, int cz) { return true; }
-            @Override public void unmarkBatch(Collection<MarkedChunk> chunks) {}
-            @Override public List<MarkedChunk> loadAll() { return List.of(); }
-            @Override public void deleteAllForWorld(String world) {}
+
+            @Override
+            public boolean mark(MarkedChunk chunk) {
+                return true;
+            }
+
+            @Override
+            public void markBatch(Collection<MarkedChunk> chunks) {
+            }
+
+            @Override
+            public boolean unmark(String world, int cx, int cz) {
+                return true;
+            }
+
+            @Override
+            public void unmarkBatch(Collection<MarkedChunk> chunks) {
+            }
+
+            @Override
+            public List<MarkedChunk> loadAll() {
+                return List.of();
+            }
+
+            @Override
+            public void deleteAllForWorld(String world) {
+            }
         };
         return new MarkRegistry(store, null, null, null, null);
     }
 
     private static final class PendingChecks implements ProtectionChecks {
-        private long revision;
+
+        private long                                           revision;
         private final CompletableFuture<ProtectionBatchResult> pending = new CompletableFuture<>();
 
-        @Override public long revision() { return revision; }
-        @Override public CompletionStage<ProtectionBatchResult> check(MaintenanceAction action, Collection<ChunkKey> chunks) {
+        @Override
+        public long revision() {
+            return revision;
+        }
+
+        @Override
+        public CompletionStage<ProtectionBatchResult> check(MaintenanceAction action, Collection<ChunkKey> chunks) {
             return pending;
         }
-        @Override public CompletionStage<ProtectionBatchResult> checkExternal(MaintenanceAction action, Collection<ChunkKey> chunks) {
+
+        @Override
+        public CompletionStage<ProtectionBatchResult> checkExternal(MaintenanceAction action,
+            Collection<ChunkKey> chunks) {
             return pending;
+        }
+    }
+
+    private static final class ImmediateChecks implements ProtectionChecks {
+
+        @Override
+        public long revision() {
+            return 0;
+        }
+
+        @Override
+        public CompletionStage<ProtectionBatchResult> check(MaintenanceAction action, Collection<ChunkKey> chunks) {
+            return CompletableFuture.completedFuture(new ProtectionBatchResult(Map.of(), Map.of()));
+        }
+
+        @Override
+        public CompletionStage<ProtectionBatchResult> checkExternal(MaintenanceAction action,
+            Collection<ChunkKey> chunks) {
+            return CompletableFuture.completedFuture(new ProtectionBatchResult(Map.of(), Map.of()));
         }
     }
 }

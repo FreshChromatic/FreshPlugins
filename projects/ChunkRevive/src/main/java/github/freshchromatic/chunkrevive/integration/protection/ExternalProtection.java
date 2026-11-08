@@ -1,5 +1,6 @@
 package github.freshchromatic.chunkrevive.integration.protection;
 
+import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.api.integration.IntegrationApi;
 import github.freshchromatic.chunkrevive.api.integration.ProtectionBatchResult;
 import github.freshchromatic.chunkrevive.api.integration.ProtectionDecision;
@@ -10,12 +11,14 @@ import github.freshchromatic.chunkrevive.config.PluginConfig;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 
-import java.util.HashMap;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 
 abstract class ExternalProtection implements ProtectionIntegration, LandProtection, ProtectionProvider {
+
     private final String pluginName;
 
     ExternalProtection(String pluginName) {
@@ -34,7 +37,7 @@ abstract class ExternalProtection implements ProtectionIntegration, LandProtecti
 
     @Override
     public String id() {
-        return pluginName.toLowerCase(java.util.Locale.ROOT);
+        return pluginName.toLowerCase(Locale.ROOT);
     }
 
     @Override
@@ -51,14 +54,16 @@ abstract class ExternalProtection implements ProtectionIntegration, LandProtecti
             boolean claimed = world != null && hasClaim(world, chunk.x(), chunk.z());
             decisions.put(chunk, claimed ? ProtectionDecision.DENY : ProtectionDecision.ABSTAIN);
             if (claimed) {
-                reasons.put(chunk, id().toUpperCase(java.util.Locale.ROOT) + "_CLAIM");
+                reasons.put(chunk, id().toUpperCase(Locale.ROOT) + "_CLAIM");
             }
         }
         return CompletableFuture.completedFuture(new ProtectionBatchResult(decisions, reasons));
     }
+
     @Override
-    public List<int[]> resolveEffectiveChunks(String world, int minX, int maxX, int minZ, int maxZ,
-            PluginConfig.Structure.PartialClaimPolicy policy) {
-        return new CombinedProtectionIntegration(List.of(this), PluginConfig.LandProtection::new).resolveEffectiveChunks(world, minX, maxX, minZ, maxZ, policy);
+    public List<ChunkCoordinate> resolveEffectiveChunks(String world, int minX, int maxX, int minZ, int maxZ,
+        PluginConfig.Structure.PartialClaimPolicy policy) {
+        return new CombinedProtectionIntegration(List.of(this),
+            PluginConfig.LandProtection::new).resolveEffectiveChunks(world, minX, maxX, minZ, maxZ, policy);
     }
 }

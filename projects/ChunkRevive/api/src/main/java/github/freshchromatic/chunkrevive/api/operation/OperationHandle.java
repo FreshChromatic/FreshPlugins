@@ -1,2 +1,10 @@
 package github.freshchromatic.chunkrevive.api.operation;
-public record OperationHandle(OperationId id) { }
+
+import java.util.Objects;
+
+public record OperationHandle(OperationId id) {
+
+    public OperationHandle {
+        Objects.requireNonNull(id, "id");
+    }
+}

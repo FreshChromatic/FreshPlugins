@@ -1,5 +1,6 @@
 package github.freshchromatic.chunkrevive.integration.protection;
 
+import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.api.integration.ProtectionBatchResult;
 import github.freshchromatic.chunkrevive.api.integration.ProtectionProvider;
 import github.freshchromatic.chunkrevive.api.integration.ProtectionQuery;
@@ -19,20 +20,30 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CombinedProtectionIntegrationTest {
-    private static final World WORLD = (World) Proxy.newProxyInstance(World.class.getClassLoader(),
-        new Class<?>[]{World.class}, (proxy, method, args) -> null);
+
+    private static final World WORLD = (World) Proxy.newProxyInstance(World.class.getClassLoader(), new Class<?>[] {
+        World.class }, (proxy, method, args) -> null);
 
     @Test
     void perProviderExclusionsDoNotOverrideEachOther() {
         var config = new PluginConfig.LandProtection();
         config.providers.towny.structurePolicy = "IGNORE_CLAIMS";
         config.providers.worldguard.structurePolicy = "EXCLUDE_CLAIMED";
-        var integration = new CombinedProtectionIntegration(List.of(
-            new Claim("towny", Set.of(0, 1)), new Claim("worldguard", Set.of(1))), () -> config);
+        var integration = new CombinedProtectionIntegration(List.of(new Claim("towny", Set.of(0, 1)), new Claim(
+            "worldguard", Set.of(1))), () -> config);
 
         var chunks = integration.resolveEffectiveChunks(WORLD, 0, 2, 0, 0, config.defaultPolicy());
-        assertEquals(List.of(0, 2), chunks.stream().map(chunk -> chunk[0]).toList());
+        assertEquals(List.of(0, 2), chunks.stream().map(ChunkCoordinate::x).toList());
         assertTrue(integration.hasClaim(WORLD, 0, 0));
+    }
+
+    @Test
+    void effectiveChunksPreserveBothCoordinatesAcrossNegativeRanges() {
+        var config = new PluginConfig.LandProtection();
+        var integration = new CombinedProtectionIntegration(List.of(), () -> config);
+
+        assertEquals(List.of(new ChunkCoordinate(-1, 3), new ChunkCoordinate(-1, 4), new ChunkCoordinate(0, 3),
+            new ChunkCoordinate(0, 4)), integration.resolveEffectiveChunks(WORLD, -1, 0, 3, 4, config.defaultPolicy()));
     }
 
     @Test
@@ -40,8 +51,8 @@ class CombinedProtectionIntegrationTest {
         var config = new PluginConfig.LandProtection();
         config.providers.towny.structurePolicy = "EXCLUDE_CLAIMED";
         config.providers.worldguard.structurePolicy = "ABORT_WHOLE";
-        var integration = new CombinedProtectionIntegration(List.of(
-            new Claim("towny", Set.of(1)), new Claim("worldguard", Set.of(1))), () -> config);
+        var integration = new CombinedProtectionIntegration(List.of(new Claim("towny", Set.of(1)), new Claim(
+            "worldguard", Set.of(1))), () -> config);
         assertNull(integration.resolveEffectiveChunks(WORLD, 0, 2, 0, 0, config.defaultPolicy()));
     }
 
@@ -57,8 +68,8 @@ class CombinedProtectionIntegrationTest {
 
     @Test
     void disabledPluginDoesNotAppearUnclaimed() {
-        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
-            (proxy, method, args) -> switch (method.getName()) {
+        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[] { Plugin.class }, (
+            proxy, method, args) -> switch (method.getName()) {
                 case "isEnabled" -> false;
                 case "getName" -> "Towny";
                 default -> null;
@@ -67,12 +78,33 @@ class CombinedProtectionIntegrationTest {
         assertThrows(IllegalStateException.class, () -> integration.hasClaim(WORLD, 1, 0));
     }
 
-    private record Claim(String id, Set<Integer> chunks) implements ProtectionIntegration, LandProtection, ProtectionProvider {
-        @Override public LandProtection landProtection() { return this; }
-        @Override public boolean isEnabled() { return true; }
-        @Override public boolean hasClaim(World world, int x, int z) { return chunks.contains(x); }
-        @Override public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) { throw new UnsupportedOperationException(); }
-        @Override public List<int[]> resolveEffectiveChunks(String world, int minX, int maxX, int minZ, int maxZ,
-                PluginConfig.Structure.PartialClaimPolicy policy) { throw new UnsupportedOperationException(); }
+    private record Claim(String id, Set<Integer> chunks) implements ProtectionIntegration, LandProtection,
+        ProtectionProvider {
+
+        @Override
+        public LandProtection landProtection() {
+            return this;
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return true;
+        }
+
+        @Override
+        public boolean hasClaim(World world, int x, int z) {
+            return chunks.contains(x);
+        }
+
+        @Override
+        public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<ChunkCoordinate> resolveEffectiveChunks(String world, int minX, int maxX, int minZ, int maxZ,
+            PluginConfig.Structure.PartialClaimPolicy policy) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

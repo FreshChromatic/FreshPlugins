@@ -1,5 +1,6 @@
 package github.freshchromatic.chunkrevive.feature.structure;
 
+import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.config.PluginConfig;
 import github.freshchromatic.chunkrevive.integration.protection.LandProtection;
 import github.freshchromatic.chunkrevive.feature.marking.MarkedChunk;
@@ -13,13 +14,13 @@ import java.util.UUID;
 /** Expands a single chunk mark to the whole structure's range, when applicable. */
 public final class StructureMarkExpander {
 
-    private PluginConfig config;
+    private PluginConfig            config;
     private final StructureDetector structureDetector;
     private final StructureRegistry structureRegistry;
-    private final LandProtection landProtection;
+    private final LandProtection    landProtection;
 
     public StructureMarkExpander(PluginConfig config, StructureDetector structureDetector,
-                                  StructureRegistry structureRegistry, LandProtection landProtection) {
+        StructureRegistry structureRegistry, LandProtection landProtection) {
         this.config = config;
         this.structureDetector = structureDetector;
         this.structureRegistry = structureRegistry;
@@ -32,7 +33,9 @@ public final class StructureMarkExpander {
 
     /** Returns the chunks that should end up marked; empty means blocked by land protection. */
     public List<MarkedChunk> expand(World world, int cx, int cz, UUID markedBy) {
-        if (landProtection.hasClaim(world, cx, cz)) return List.of();
+        if (landProtection.hasClaim(world, cx, cz)) {
+            return List.of();
+        }
         if (!config.structure.enabled || !config.structure.mark.expandToFullStructure) {
             return plainMark(world, cx, cz, markedBy);
         }
@@ -42,19 +45,19 @@ public final class StructureMarkExpander {
             int minCx = bb.minX() >> 4, maxCx = bb.maxX() >> 4;
             int minCz = bb.minZ() >> 4, maxCz = bb.maxZ() >> 4;
 
-            List<int[]> effective = structureRegistry.resolveEffectiveChunks(
-                world.getName(), minCx, maxCx, minCz, maxCz);
+            List<ChunkCoordinate> effective = structureRegistry.resolveEffectiveChunks(world.getName(), minCx, maxCx,
+                minCz, maxCz);
             if (effective == null || effective.isEmpty()) {
                 return plainMark(world, cx, cz, markedBy);
             }
 
-            UUID groupId = structureRegistry.findOrCreateGroup(
-                world.getName(), detected.structureId(), minCx, maxCx, minCz, maxCz);
+            UUID groupId = structureRegistry.findOrCreateGroup(world.getName(), detected.structureId(), minCx, maxCx,
+                minCz, maxCz);
 
             long now = System.currentTimeMillis();
             List<MarkedChunk> chunks = new ArrayList<>();
-            for (int[] coord : effective) {
-                chunks.add(new MarkedChunk(world.getName(), coord[0], coord[1], markedBy, now, groupId));
+            for (ChunkCoordinate coord : effective) {
+                chunks.add(new MarkedChunk(world.getName(), coord.x(), coord.z(), markedBy, now, groupId));
             }
             return chunks;
         }
@@ -63,7 +66,9 @@ public final class StructureMarkExpander {
     }
 
     private List<MarkedChunk> plainMark(World world, int cx, int cz, UUID markedBy) {
-        if (landProtection.hasClaim(world, cx, cz)) return List.of();
+        if (landProtection.hasClaim(world, cx, cz)) {
+            return List.of();
+        }
         return List.of(new MarkedChunk(world.getName(), cx, cz, markedBy, System.currentTimeMillis()));
     }
 }

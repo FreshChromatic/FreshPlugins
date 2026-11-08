@@ -1,4 +1,16 @@
 package github.freshchromatic.chunkrevive.api.operation;
 
 import java.util.List;
-public record OperationPage(int total, List<OperationSnapshot> operations) { public OperationPage { operations = List.copyOf(operations); } }
+
+public record OperationPage(int total, List<OperationSnapshot> operations) {
+
+    public OperationPage {
+        if (total < 0) {
+            throw new IllegalArgumentException("total must not be negative");
+        }
+        operations = List.copyOf(operations);
+        if (total < operations.size()) {
+            throw new IllegalArgumentException("total must be at least the number of operations in the page");
+        }
+    }
+}

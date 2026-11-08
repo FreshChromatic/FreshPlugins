@@ -33,11 +33,12 @@ import java.util.function.Supplier;
  * of the item in the slot that corresponds to the state that the element is in.
  */
 public class GuiStateElement extends GuiElement {
+
     private Supplier<Integer> queryState = null;
-    private boolean silent = false;
-    private int currentState;
-    private final State[] states;
-    private boolean switchStateOnClick;
+    private boolean           silent     = false;
+    private int               currentState;
+    private final State[]     states;
+    private boolean           switchStateOnClick;
 
     /**
      * An element that can switch between certain states.
@@ -111,7 +112,7 @@ public class GuiStateElement extends GuiElement {
         this(slotChar, switchStateOnClick, queryState.get(), states);
         this.queryState = () -> getStateIndex(queryState.get(), states);
     }
-    
+
     /**
      * An element that can switch between certain states. It will automatically switch to the next state when clicked.
      * @param slotChar      The character to replace in the gui setup string.
@@ -214,7 +215,7 @@ public class GuiStateElement extends GuiElement {
     public void setSwitchStateOnClick(boolean switchStateOnClick) {
         this.switchStateOnClick = switchStateOnClick;
     }
-    
+
     /**
      * Try to query the current state if there is a query
      */
@@ -223,7 +224,7 @@ public class GuiStateElement extends GuiElement {
             currentState = queryState.get();
         }
     }
-    
+
     /**
      * Set the current state with the state's key. Does not trigger the state's change.
      * @param key       The key to search for.
@@ -253,11 +254,12 @@ public class GuiStateElement extends GuiElement {
      * A state that the {@link GuiStateElement} can have.
      */
     public static class State {
-        private final Change change;
-        private final String key;
+
+        private final Change    change;
+        private final String    key;
         private final ItemStack item;
-        private String[] text;
-        private InventoryGui gui;
+        private String[]        text;
+        private InventoryGui    gui;
 
         /**
          * A state that the {@link GuiStateElement} can have.
@@ -354,6 +356,7 @@ public class GuiStateElement extends GuiElement {
          * A simple implementation of the {@link Change} interface that allows for lambda expressions for the state enter and leave methods
          */
         public static class ChangeHandler implements Change {
+
             private final Consumer<Click> onStateEnter;
             private final Consumer<Click> onStateLeave;
 
@@ -383,4 +386,3 @@ public class GuiStateElement extends GuiElement {
         }
     }
 }
-

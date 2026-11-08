@@ -18,20 +18,22 @@ import org.incendo.cloud.context.CommandContext;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 /** Handles direct chunk mark/unmark operations and follow modes. */
 public final class MarkCommands {
-    private static final int PAGE_SIZE = 8;
-    private final ChunkRevivePlugin plugin;
-    private final MarkService markService;
-    private Messages messages;
 
-    public MarkCommands(
-            ChunkRevivePlugin plugin,
-            MarkService markService,
-            Messages messages) {
+    private static final int          PAGE_SIZE = 8;
+    private final ChunkRevivePlugin   plugin;
+    private final MarkService         markService;
+    private final ConfirmationManager confirmationManager;
+    private Messages                  messages;
+
+    public MarkCommands(ChunkRevivePlugin plugin, MarkService markService, ConfirmationManager confirmationManager,
+        Messages messages) {
         this.plugin = plugin;
         this.markService = markService;
+        this.confirmationManager = confirmationManager;
         this.messages = messages;
     }
 
@@ -45,9 +47,9 @@ public final class MarkCommands {
         String world = player.getWorld().getName();
         int cx = chunk.getX(), cz = chunk.getZ();
         var mc = new MarkedChunk(world, cx, cz, player.getUniqueId(), 0);
-        markService.markAsync(world, cx, cz, player.getUniqueId()).whenComplete((result, failure) ->
-            Scheduler.runTask(plugin, () -> player.sendMessage(markMessage(
-                failure == null ? result : MarkService.MarkStatus.CLAIM_BLOCKED, mc)), player));
+        markService.markAsync(world, cx, cz, player.getUniqueId()).whenComplete((result, failure) -> Scheduler.runTask(
+            plugin, () -> player.sendMessage(failure == null ? markMessage(result, mc) : markPersistenceFailure()),
+            player));
     }
 
     public void markCoordinates(CommandContext<Commander> ctx) {
@@ -58,7 +60,7 @@ public final class MarkCommands {
         UUID actor = sender instanceof PlayerCommander pc ? pc.player().getUniqueId() : UUID.randomUUID();
         var mc = new MarkedChunk(world, cx, cz, actor, 0);
         markService.markAsync(world, cx, cz, actor).whenComplete((result, failure) -> {
-            var message = markMessage(failure == null ? result : MarkService.MarkStatus.CLAIM_BLOCKED, mc);
+            var message = failure == null ? markMessage(result, mc) : markPersistenceFailure();
             if (sender instanceof PlayerCommander playerSender) {
                 Scheduler.runTask(plugin, () -> sender.sendMessage(message), playerSender.player());
             } else {
@@ -70,10 +72,17 @@ public final class MarkCommands {
     private Component markMessage(MarkService.MarkStatus result, MarkedChunk mc) {
         return switch (result) {
             case SUCCESS -> messages.mark.success.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
-            case ALREADY_MARKED -> messages.mark.already.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
-            case CLAIM_BLOCKED -> messages.mark.residenceBlocked.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
-            case WORLD_NOT_ALLOWED -> messages.scan.worldNotAllowed.withPlaceholders(Components.placeholder("world", mc.world()));
+            case ALREADY_MARKED -> messages.mark.already.withPlaceholders(Components.placeholder("cx_cz",
+                mc.coordDisplay()));
+            case CLAIM_BLOCKED -> messages.mark.residenceBlocked.withPlaceholders(Components.placeholder("cx_cz",
+                mc.coordDisplay()));
+            case WORLD_NOT_ALLOWED -> messages.scan.worldNotAllowed.withPlaceholders(Components.placeholder("world",
+                mc.world()));
         };
+    }
+
+    private Component markPersistenceFailure() {
+        return Component.text(messages.text("mark-persistence-failed")).color(AdminTuiBuilder.SEVERE);
     }
 
     public void markFollow(CommandContext<PlayerCommander> ctx) {
@@ -87,7 +96,7 @@ public final class MarkCommands {
         var chunk = player.getLocation().getChunk();
         String world = player.getWorld().getName();
         int cx = chunk.getX(), cz = chunk.getZ();
-        doUnmark(ctx.sender(), world, cx, cz, player.getUniqueId());
+        doUnmark(ctx.sender(), world, cx, cz);
     }
 
     public void unmarkFollow(CommandContext<PlayerCommander> ctx) {
@@ -100,23 +109,43 @@ public final class MarkCommands {
         String world = ctx.get("world");
         int cx = ctx.get("cx");
         int cz = ctx.get("cz");
-        doUnmark(ctx.sender(), world, cx, cz, null);
+        doUnmark(ctx.sender(), world, cx, cz);
     }
 
-    private void doUnmark(Commander sender, String world, int cx, int cz, UUID actor) {
-        boolean removed = markService.unmark(world, cx, cz, actor);
+    private void doUnmark(Commander sender, String world, int cx, int cz) {
         var mc = new MarkedChunk(world, cx, cz, UUID.randomUUID(), 0);
-        sender.sendMessage(removed
-            ? messages.unmark.success.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()))
-            : messages.unmark.notMarked.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay())));
+        Bukkit.getGlobalRegionScheduler().execute(plugin, () -> markService.unmarkPersisted(world, cx, cz).whenComplete(
+            (removed, failure) -> Bukkit.getGlobalRegionScheduler().execute(plugin, () -> {
+                if (failure != null) {
+                    plugin.getLogger().warning("Failed to save mark removal: " + failure.getMessage());
+                    sendToSender(sender, markPersistenceFailure());
+                    return;
+                }
+                Component message = removed.isPresent() ? messages.unmark.success.withPlaceholders(
+                    Components.placeholder("cx_cz", mc.coordDisplay()))
+                    : messages.unmark.notMarked.withPlaceholders(Components.placeholder("cx_cz", mc.coordDisplay()));
+                removed.ifPresent(markService::refreshUnmarkedDisplay);
+                sendToSender(sender, message);
+            })));
     }
 
+    private void sendToSender(Commander sender, Component message) {
+        CommandMessageRouter.send(plugin, sender, message);
+    }
 
     public void resetMarks(CommandContext<Commander> ctx, boolean confirmed) {
         var sender = ctx.sender();
         String worldName = ctx.get("world");
+        if (CommandMessageRouter.dispatchGlobal(plugin, () -> resetMarks(sender, worldName, confirmed))) {
+            return;
+        }
+        resetMarks(sender, worldName, confirmed);
+    }
+
+    private void resetMarks(Commander sender, String worldName, boolean confirmed) {
         if (Bukkit.getWorld(worldName) == null) {
-            sender.sendMessage(Component.text(messages.text("world-not-found", worldName)).color(AdminTuiBuilder.SEVERE));
+            CommandMessageRouter.send(plugin, sender, Component.text(messages.text("world-not-found", worldName)).color(
+                AdminTuiBuilder.SEVERE));
             return;
         }
 
@@ -124,18 +153,30 @@ public final class MarkCommands {
         // must stay possible even for a world that has since been disallowed.
         String key = "resetmark:" + worldName;
         if (confirmed) {
-            var result = markService.resetWorld(worldName);
-            sender.sendMessage(messages.scan.resetComplete.withPlaceholders(
-                Components.placeholder("world", worldName),
-                Components.placeholder("count", String.valueOf(result.chunkCount())),
-                Components.placeholder("group_count", String.valueOf(result.groupCount()))));
+            if (!confirmationManager.confirm(sender.commanderId(), key)) {
+                CommandMessageRouter.send(plugin, sender, messages.scan.confirmExpired.asComponent());
+                return;
+            }
+            Executor executor = task -> Bukkit.getGlobalRegionScheduler().execute(plugin, task);
+            markService.resetWorld(worldName).whenCompleteAsync((result, failure) -> {
+                if (failure != null) {
+                    plugin.getLogger().warning("Failed to reset marks for " + worldName + ": " + failure.getMessage());
+                    sendToSender(sender, Component.text(messages.text("mark-reset-failed")).color(
+                        AdminTuiBuilder.SEVERE));
+                    return;
+                }
+                sendToSender(sender, messages.scan.resetComplete.withPlaceholders(Components.placeholder("world",
+                    worldName), Components.placeholder("count", String.valueOf(result.chunkCount())),
+                    Components.placeholder("group_count", String.valueOf(result.groupCount()))));
+            }, executor);
             return;
         }
 
         var cfg = plugin.getPluginConfig();
-        sender.sendMessage(messages.scan.resetConfirmRequired.withPlaceholders(
-            Components.placeholder("world", worldName),
-            Components.placeholder("timeout", String.valueOf(cfg.safety.confirmTimeoutSeconds))));
+        confirmationManager.request(sender.commanderId(), key, cfg.safety.confirmTimeoutSeconds);
+        CommandMessageRouter.send(plugin, sender, messages.scan.resetConfirmRequired.withPlaceholders(
+            Components.placeholder("world", worldName), Components.placeholder("timeout", String.valueOf(
+                cfg.safety.confirmTimeoutSeconds))));
     }
 
     public void list(CommandContext<Commander> ctx) {
@@ -145,8 +186,7 @@ public final class MarkCommands {
         var all = markService.independentMarksNewestFirst();
 
         if (all.isEmpty()) {
-            sender.sendMessage(AdminTuiBuilder.line(
-                messages.list.empty.asComponent()));
+            sender.sendMessage(AdminTuiBuilder.line(messages.list.empty.asComponent()));
             return;
         }
 
@@ -158,63 +198,49 @@ public final class MarkCommands {
         sender.sendMessage(AdminTuiBuilder.divider());
 
         for (var chunk : pageItems) {
-            var entryText = messages.list.entry.withPlaceholders(
-                Components.placeholder("world", chunk.world()),
-                Components.placeholder("cx_cz", chunk.coordDisplay()),
-                Components.placeholder("marked_by", resolveDisplayName(chunk.markedBy())),
-                Components.placeholder("marked_at", formatRelative(chunk.markedAt())));
+            var entryText = messages.list.entry.withPlaceholders(Components.placeholder("world", chunk.world()),
+                Components.placeholder("cx_cz", chunk.coordDisplay()), Components.placeholder("marked_by",
+                    resolveDisplayName(chunk.markedBy())), Components.placeholder("marked_at", formatRelative(
+                        chunk.markedAt())));
 
             var unmarkCmd = "/cr unmark unmark %s %d %d".formatted(chunk.world(), chunk.cx(), chunk.cz());
-            var regenCmd  = "/cr regen regen %s %d %d".formatted(chunk.world(), chunk.cx(), chunk.cz());
+            var regenCmd = "/cr regen regen %s %d %d".formatted(chunk.world(), chunk.cx(), chunk.cz());
 
-            var unmarkBtn = AdminTuiBuilder.severeButton(
-                messages.list.btnUnmark.asComponent(),
-                ClickEvent.runCommand(unmarkCmd),
-                Component.text(messages.text("list-unmark-hover")).color(AdminTuiBuilder.SECONDARY));
+            var unmarkBtn = AdminTuiBuilder.severeButton(messages.list.btnUnmark.asComponent(), ClickEvent.runCommand(
+                unmarkCmd), Component.text(messages.text("list-unmark-hover")).color(AdminTuiBuilder.SECONDARY));
 
-            var regenBtn = AdminTuiBuilder.actionButton(
-                messages.list.btnRegen.asComponent(),
-                ClickEvent.runCommand(regenCmd),
-                Component.text(messages.text("list-regen-hover")).color(AdminTuiBuilder.SECONDARY));
+            var regenBtn = AdminTuiBuilder.actionButton(messages.list.btnRegen.asComponent(), ClickEvent.runCommand(
+                regenCmd), Component.text(messages.text("list-regen-hover")).color(AdminTuiBuilder.SECONDARY));
 
-            sender.sendMessage(
-                Component.text()
-                    .append(unmarkBtn)
-                    .append(Component.text(" "))
-                    .append(regenBtn)
-                    .append(Component.text(" "))
-                    .append(AdminTuiBuilder.line(entryText))
-                    .build());
+            sender.sendMessage(Component.text()
+                .append(unmarkBtn)
+                .append(Component.text(" "))
+                .append(regenBtn)
+                .append(Component.text(" "))
+                .append(AdminTuiBuilder.line(entryText))
+                .build());
         }
 
         sender.sendMessage(AdminTuiBuilder.divider());
 
-        var prevBtn = page > 1
-            ? AdminTuiBuilder.normalButton(
-                messages.list.btnPrev.asComponent(),
-                ClickEvent.runCommand("/cr mark list " + (page - 1)),
-                Component.empty())
+        var prevBtn = page > 1 ? AdminTuiBuilder.normalButton(messages.list.btnPrev.asComponent(),
+            ClickEvent.runCommand("/cr mark list " + (page - 1)), Component.empty())
             : AdminTuiBuilder.disabledButton(messages.list.btnPrev.asComponent());
 
-        var nextBtn = page < totalPages
-            ? AdminTuiBuilder.normalButton(
-                messages.list.btnNext.asComponent(),
-                ClickEvent.runCommand("/cr mark list " + (page + 1)),
-                Component.empty())
+        var nextBtn = page < totalPages ? AdminTuiBuilder.normalButton(messages.list.btnNext.asComponent(),
+            ClickEvent.runCommand("/cr mark list " + (page + 1)), Component.empty())
             : AdminTuiBuilder.disabledButton(messages.list.btnNext.asComponent());
 
-        var pageCounter = messages.list.pageInfo.withPlaceholders(
-            Components.placeholder("page", String.valueOf(page)),
+        var pageCounter = messages.list.pageInfo.withPlaceholders(Components.placeholder("page", String.valueOf(page)),
             Components.placeholder("total", String.valueOf(totalPages)));
 
-        sender.sendMessage(AdminTuiBuilder.actionBar(
-            Component.text()
-                .append(prevBtn)
-                .append(Component.text("  ").color(AdminTuiBuilder.SECONDARY))
-                .append(pageCounter)
-                .append(Component.text("  ").color(AdminTuiBuilder.SECONDARY))
-                .append(nextBtn)
-                .build()));
+        sender.sendMessage(AdminTuiBuilder.actionBar(Component.text()
+            .append(prevBtn)
+            .append(Component.text("  ").color(AdminTuiBuilder.SECONDARY))
+            .append(pageCounter)
+            .append(Component.text("  ").color(AdminTuiBuilder.SECONDARY))
+            .append(nextBtn)
+            .build()));
     }
 
     private static String resolveDisplayName(UUID uuid) {
@@ -224,9 +250,15 @@ public final class MarkCommands {
 
     private String formatRelative(long epochMillis) {
         long seconds = Duration.between(Instant.ofEpochMilli(epochMillis), Instant.now()).getSeconds();
-        if (seconds < 60) return messages.text("relative-seconds", seconds);
-        if (seconds < 3600) return messages.text("relative-minutes", seconds / 60);
-        if (seconds < 86400) return messages.text("relative-hours", seconds / 3600);
+        if (seconds < 60) {
+            return messages.text("relative-seconds", seconds);
+        }
+        if (seconds < 3600) {
+            return messages.text("relative-minutes", seconds / 60);
+        }
+        if (seconds < 86400) {
+            return messages.text("relative-hours", seconds / 3600);
+        }
         return messages.text("relative-days", seconds / 86400);
     }
 }

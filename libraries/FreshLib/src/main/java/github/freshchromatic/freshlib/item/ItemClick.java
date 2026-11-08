@@ -6,9 +6,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerInteractEvent;
 
 public interface ItemClick {
+
     NamespacedKey ON_CLICK_KEY = new NamespacedKey(FreshLib.getInstance().getPlugin(), "oninteract");
 
     ItemClick EMPTY = new ItemClick() {
+
         @Override
         public String getId() {
             return null;

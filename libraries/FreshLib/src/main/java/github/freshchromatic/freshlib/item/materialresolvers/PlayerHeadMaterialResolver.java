@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
  * resolved without depending on any external plugin.
  */
 public final class PlayerHeadMaterialResolver implements MaterialResolver {
+
     private static final Pattern TEXTURE_URL_IN_JSON = Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"");
 
     @Override
@@ -34,9 +35,7 @@ public final class PlayerHeadMaterialResolver implements MaterialResolver {
     @Override
     public ItemStack resolve(String materialTag, Player player) {
         String trimmed = materialTag.trim();
-        String value = trimmed.regionMatches(true, 0, "head:", 0, 5)
-                ? trimmed.substring("head:".length()).trim()
-                : "";
+        String value = trimmed.regionMatches(true, 0, "head:", 0, 5) ? trimmed.substring("head:".length()).trim() : "";
 
         ItemStack item = new ItemStack(Material.PLAYER_HEAD);
         if (value.isEmpty()) {
@@ -44,7 +43,9 @@ public final class PlayerHeadMaterialResolver implements MaterialResolver {
         }
 
         item.editMeta(meta -> {
-            if (!(meta instanceof SkullMeta skullMeta)) return;
+            if (!(meta instanceof SkullMeta skullMeta)) {
+                return;
+            }
             URL textureUrl = resolveTextureUrl(value);
             if (textureUrl != null) {
                 PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());

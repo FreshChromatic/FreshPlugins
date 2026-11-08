@@ -30,10 +30,11 @@ import org.bukkit.inventory.ItemStack;
  * If you want the item to change on click you have to do that yourself.
  */
 public class StaticGuiElement extends GuiElement {
+
     private ItemStack item;
-    private int number;
-    private String[] text;
-    
+    private int       number;
+    private String[]  text;
+
     /**
      * Represents an element in a gui
      * @param slotChar  The character to replace in the gui setup string
@@ -47,13 +48,14 @@ public class StaticGuiElement extends GuiElement {
      *                  If it's not set/empty the item's default name will be used
      * @throws IllegalArgumentException If the number is below 1 or above the max stack count (currently 64)
      */
-    public StaticGuiElement(char slotChar, ItemStack item, int number, Action action, String... text) throws IllegalArgumentException {
+    public StaticGuiElement(char slotChar, ItemStack item, int number, Action action, String... text)
+        throws IllegalArgumentException {
         super(slotChar, action);
         this.item = item;
         this.text = text;
         setNumber(number);
     }
-    
+
     /**
      * Represents an element in a gui
      * @param slotChar  The character to replace in the gui setup string
@@ -82,7 +84,6 @@ public class StaticGuiElement extends GuiElement {
     public StaticGuiElement(char slotChar, ItemStack item, String... text) {
         this(slotChar, item, item != null ? item.getAmount() : 1, null, text);
     }
-
 
     /**
      * Set the item that is displayed by this element
@@ -157,4 +158,3 @@ public class StaticGuiElement extends GuiElement {
     }
 
 }
-

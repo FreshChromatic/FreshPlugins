@@ -1,12 +1,18 @@
 package github.freshchromatic.chunkrevive.config;
 
+import github.freshchromatic.chunkrevive.feature.reset.ResetMethod;
+import github.freshchromatic.chunkrevive.feature.structure.StructureAliases;
+import github.freshchromatic.chunkrevive.nms.BiomeMatchMode;
+import github.freshchromatic.chunkrevive.nms.HeightmapKind;
 import github.freshchromatic.freshlib.config.Config;
 import org.spongepowered.configurate.objectmapping.ConfigSerializable;
 import org.spongepowered.configurate.objectmapping.meta.Comment;
 import org.spongepowered.configurate.objectmapping.meta.Setting;
-import github.freshchromatic.chunkrevive.feature.reset.ResetMethod;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @ConfigSerializable
@@ -17,20 +23,20 @@ public final class PluginConfig implements Config {
         return "config.yml";
     }
 
-    public Database database = new Database();
-    public Regen regen = new Regen();
+    public Database       database       = new Database();
+    public Regen          regen          = new Regen();
     @Setting("reset-strategy")
-    public ResetStrategy resetStrategy = new ResetStrategy();
-    public Deletion deletion = new Deletion();
-    public Display display = new Display();
-    public Structure structure = new Structure();
-    public Worlds worlds = new Worlds();
-    public Scan scan = new Scan();
+    public ResetStrategy  resetStrategy  = new ResetStrategy();
+    public Deletion       deletion       = new Deletion();
+    public Display        display        = new Display();
+    public Structure      structure      = new Structure();
+    public Worlds         worlds         = new Worlds();
+    public Scan           scan           = new Scan();
     @Setting("land-protection")
     public LandProtection landProtection = new LandProtection();
-    public Biome biome = new Biome();
-    public Safety safety = new Safety();
-    public Updates updates = new Updates();
+    public Biome          biome          = new Biome();
+    public Safety         safety         = new Safety();
+    public Updates        updates        = new Updates();
 
     @Setting("enable-debug-logs")
     @Comment("Whether to show detailed structure, terrain generation, and deletion diagnostic logs")
@@ -38,6 +44,7 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class LandProtection {
+
         @Setting("scan-claims")
         @Comment("Check claims during bulk scans and biome selection. Regeneration and deletion always check enabled providers.")
         public boolean scanClaims = true;
@@ -58,14 +65,16 @@ public final class PluginConfig implements Config {
 
         public Structure.PartialClaimPolicy policy(String providerId, Structure.PartialClaimPolicy inherited) {
             Provider provider = providers.byId(providerId);
-            if (provider == null || (provider.structurePolicy != null
-                    && "INHERIT".equalsIgnoreCase(provider.structurePolicy.trim()))) return inherited;
+            if (provider == null || (provider.structurePolicy != null && "INHERIT".equalsIgnoreCase(
+                provider.structurePolicy.trim()))) {
+                return inherited;
+            }
             return parsePolicy(provider.structurePolicy, Structure.PartialClaimPolicy.ABORT_WHOLE);
         }
 
         private static Structure.PartialClaimPolicy parsePolicy(String value, Structure.PartialClaimPolicy fallback) {
             try {
-                return Structure.PartialClaimPolicy.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+                return Structure.PartialClaimPolicy.valueOf(value.trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException | NullPointerException exception) {
                 return fallback;
             }
@@ -73,33 +82,34 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class Provider {
+
             @Comment("Enable this integration when its plugin is installed. Changes require a server restart.")
-            public boolean enabled = true;
+            public boolean enabled         = true;
             @Setting("structure-policy")
             @Comment("INHERIT, EXCLUDE_CLAIMED, ABORT_WHOLE, or IGNORE_CLAIMS.")
-            public String structurePolicy = "INHERIT";
+            public String  structurePolicy = "INHERIT";
         }
 
         @ConfigSerializable
         public static class Providers {
-            public static final java.util.List<String> IDS = java.util.List.of(
-                "residence", "griefprevention", "griefdefender", "towny", "worldguard", "dominion", "homestead",
-                "ccp", "landclaimplugin", "bonfire");
 
-            public Provider residence = new Provider();
+            public static final List<String> IDS = List.of("residence", "griefprevention", "griefdefender", "towny",
+                "worldguard", "dominion", "homestead", "ccp", "landclaimplugin", "bonfire");
+
+            public Provider residence        = new Provider();
             @Setting("grief-prevention")
-            public Provider griefPrevention = new Provider();
+            public Provider griefPrevention  = new Provider();
             @Setting("grief-defender")
-            public Provider griefDefender = new Provider();
-            public Provider towny = new Provider();
-            public Provider worldguard = new Provider();
-            public Provider dominion = new Provider();
-            public Provider homestead = new Provider();
+            public Provider griefDefender    = new Provider();
+            public Provider towny            = new Provider();
+            public Provider worldguard       = new Provider();
+            public Provider dominion         = new Provider();
+            public Provider homestead        = new Provider();
             @Setting("chunk-claim-plugin")
             public Provider chunkClaimPlugin = new Provider();
             @Setting("land-claim-plugin")
-            public Provider landClaimPlugin = new Provider();
-            public Provider bonfire = new Provider();
+            public Provider landClaimPlugin  = new Provider();
+            public Provider bonfire          = new Provider();
 
             public Provider byId(String id) {
                 return switch (id) {
@@ -121,12 +131,14 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class Updates {
+
         @Comment("Check Modrinth for a newer compatible ChunkRevive release. No files are downloaded automatically.")
         public boolean enabled = false;
     }
 
     @ConfigSerializable
     public static class ResetStrategy {
+
         @Setting("default-method")
         @Comment("Base method inherited by condition-specific DEFAULT values. Supported: REGENERATE, DELETE_CHUNK, DELETE_REGION.")
         public String defaultMethod = "DELETE_CHUNK";
@@ -155,6 +167,7 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class Deletion {
+
         @Setting("check-interval-ticks")
         @Comment("How often waiting chunk-delete and region-prune jobs are checked for a cold target.")
         public long checkIntervalTicks = 20L;
@@ -195,20 +208,23 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class Database {
+
         @Comment("Database type: sqlite or mysql")
-        public String type = "sqlite";
+        public String type   = "sqlite";
         public Sqlite sqlite = new Sqlite();
-        public Mysql mysql = new Mysql();
+        public Mysql  mysql  = new Mysql();
 
         @ConfigSerializable
         public static class Sqlite {
+
             public String file = "chunkrevive.db";
         }
 
         @ConfigSerializable
         public static class Mysql {
-            public String host = "localhost";
-            public int port = 3306;
+
+            public String host     = "localhost";
+            public int    port     = 3306;
             public String database = "chunkrevive";
             public String username = "root";
             public String password = "";
@@ -217,6 +233,7 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class Regen {
+
         @Setting("batch-delay-ticks")
         @Comment("Ticks to wait between chunks during batch regen (20 ticks = 1 second)")
         public int batchDelayTicks = 10;
@@ -263,12 +280,16 @@ public final class PluginConfig implements Config {
             + "Ignored when work-tile-mode is MCA, whose span is always the Anvil region width of 32 chunks.")
         public int workTileSpan = 16;
 
-        public enum WorkTileMode { LOGICAL, MCA }
+        public enum WorkTileMode {
+            LOGICAL, MCA
+        }
 
         public WorkTileMode workTileModeEnum() {
-            if (workTileMode == null) return WorkTileMode.LOGICAL;
+            if (workTileMode == null) {
+                return WorkTileMode.LOGICAL;
+            }
             try {
-                return WorkTileMode.valueOf(workTileMode.trim().toUpperCase(java.util.Locale.ROOT));
+                return WorkTileMode.valueOf(workTileMode.trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException ignored) {
                 return WorkTileMode.LOGICAL;
             }
@@ -305,6 +326,7 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class MemorySafety {
+
             @Comment("Enable heap-aware limits for bulk regeneration. Keep this enabled unless the server has been profiled with a larger heap.")
             public boolean enabled = true;
 
@@ -327,6 +349,7 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class ThreadPool {
+
             @Setting("parallelism")
             @Comment("The parallelism level (number of concurrent threads) to use for terrain generation.\n"
                 + "Supported values:\n"
@@ -360,6 +383,7 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class Display {
+
         @Comment("Whether marked-chunk floating TextDisplay markers are enabled. Requires PacketEvents.")
         public boolean enabled = true;
 
@@ -386,19 +410,25 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class Worlds {
-        public enum ListMode { WHITELIST, BLACKLIST }
+
+        public enum ListMode {
+            WHITELIST, BLACKLIST
+        }
 
         @Comment("WHITELIST: list is the only set of worlds allowed. BLACKLIST (default): every world except those listed is allowed.")
         public String mode = ListMode.BLACKLIST.name();
 
         @Comment("World names this list applies to. Default empty list + BLACKLIST mode changes nothing (fully backward compatible).")
-        public java.util.List<String> list = new java.util.ArrayList<>();
+        public List<String> list = new ArrayList<>();
 
         public Scope scope = new Scope();
 
         public ListMode modeEnum() {
+            if (mode == null) {
+                return ListMode.BLACKLIST;
+            }
             try {
-                return ListMode.valueOf(mode.trim().toUpperCase(java.util.Locale.ROOT));
+                return ListMode.valueOf(mode.trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 return ListMode.BLACKLIST;
             }
@@ -406,6 +436,7 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class Scope {
+
             @Setting("manual-mark")
             @Comment("/cr mark, /cr unmark, follow mode")
             public boolean manualMark = true;
@@ -429,6 +460,7 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class Scan {
+
         @Setting("min-persisted-status")
         @Comment("Minimum saved generation stage for fullmark/radiusmark; includes this stage and later stages. Does not control regeneration.\n"
             + "Stages: STRUCTURE_STARTS -> STRUCTURE_REFERENCES -> BIOMES -> NOISE -> SURFACE -> CARVERS -> FEATURES -> LIGHT -> SPAWN -> FULL.\n"
@@ -450,18 +482,21 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class ThreadPool {
+
             @Comment("Each region task opens its own region file directly (bypassing the server's single-\n"
                 + "threaded chunk I/O queue) and only decodes the chunk Status tag and tracked-structure\n"
                 + "starts, not a full chunk. This is real concurrent disk I/O, so scale with available cores\n"
                 + "(and lean lower on spinning disks, higher on SSD/NVMe).")
             public int parallelism = 4;
-            public int priority = 3;
-            public boolean daemon = true;
+
+            public int     priority = 3;
+            public boolean daemon   = true;
         }
     }
 
     @ConfigSerializable
     public static class Biome {
+
         @Setting("match-mode")
         @Comment("Sampling strategy for /cr mark biomeradius/biomefull:\n"
             + "  CENTER    -> sample only the chunk's center column (1 noise-height lookup, fastest, default).\n"
@@ -484,6 +519,7 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class Regen {
+
             @Setting("regen-full-biome-range")
             @Comment("When a /cr regen all batch contains a contiguous run of biome-matched chunks, regen the whole\n"
                 + "run as one atomic batch (ignoring regen.max-chunks-per-batch), same treatment as structure groups.\n"
@@ -500,27 +536,32 @@ public final class PluginConfig implements Config {
             public int floodFillMaxChunks = 4096;
         }
 
-        public github.freshchromatic.chunkrevive.nms.BiomeMatchMode matchModeEnum() {
+        public BiomeMatchMode matchModeEnum() {
+            if (matchMode == null) {
+                return BiomeMatchMode.CENTER;
+            }
             try {
-                return github.freshchromatic.chunkrevive.nms.BiomeMatchMode.valueOf(
-                    matchMode.trim().toUpperCase(java.util.Locale.ROOT));
+                return BiomeMatchMode.valueOf(matchMode.trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
-                return github.freshchromatic.chunkrevive.nms.BiomeMatchMode.CENTER;
+                return BiomeMatchMode.CENTER;
             }
         }
 
-        public github.freshchromatic.chunkrevive.nms.HeightmapKind heightmapTypeEnum() {
+        public HeightmapKind heightmapTypeEnum() {
+            if (heightmapType == null) {
+                return HeightmapKind.WORLD_SURFACE;
+            }
             try {
-                return github.freshchromatic.chunkrevive.nms.HeightmapKind.valueOf(
-                    heightmapType.trim().toUpperCase(java.util.Locale.ROOT));
+                return HeightmapKind.valueOf(heightmapType.trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
-                return github.freshchromatic.chunkrevive.nms.HeightmapKind.WORLD_SURFACE;
+                return HeightmapKind.WORLD_SURFACE;
             }
         }
     }
 
     @ConfigSerializable
     public static class Safety {
+
         @Setting("confirm-timeout-seconds")
         @Comment("How long a pending confirmation (fullmark/resetmark/regenallmark) stays valid")
         public int confirmTimeoutSeconds = 30;
@@ -532,19 +573,21 @@ public final class PluginConfig implements Config {
 
     @ConfigSerializable
     public static class Structure {
+
         @Comment("Master switch for the structure detection/refresh/protection subsystem; when false, nothing is scanned, scheduled, or blocked")
         public boolean enabled = true;
 
-        public Detect detect = new Detect();
-        public Mark mark = new Mark();
-        public Refresh refresh = new Refresh();
-        public Protection protection = new Protection();
+        public Detect           detect           = new Detect();
+        public Mark             mark             = new Mark();
+        public Refresh          refresh          = new Refresh();
+        public Protection       protection       = new Protection();
         @Setting("entity-exemptions")
         public EntityExemptions entityExemptions = new EntityExemptions();
-        public Regen regen = new Regen();
+        public Regen            regen            = new Regen();
 
         @ConfigSerializable
         public static class Detect {
+
             @Setting("auto-detect-on-walk")
             @Comment("Whether walking players automatically detect and register nearby structures")
             public boolean autoDetectOnWalk = true;
@@ -560,6 +603,7 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class Mark {
+
             @Setting("expand-to-full-structure")
             @Comment("When marking a chunk that belongs to a structure, expand the mark to the whole structure's bounding box")
             public boolean expandToFullStructure = true;
@@ -569,16 +613,19 @@ public final class PluginConfig implements Config {
         // back out with a "!!fully.qualified.Class$Name" global tag, which SnakeYAML's safe parser
         // then refuses to read back in on the next load. Store as String (like Database.type) and
         // parse on demand instead.
-        public enum ListMode { WHITELIST, BLACKLIST }
+        public enum ListMode {
+            WHITELIST, BLACKLIST
+        }
 
         @ConfigSerializable
         public static class Refresh {
+
             @Comment("Set to false to disable automatic structure refreshes.")
             public boolean enabled = true;
 
             @Setting("list-mode")
-            @Comment("BLACKLIST (default): refresh every detected structure except IDs in tracked-structures; uses default-interval-days.\n" +
-                "WHITELIST: refresh only IDs in tracked-structures; each entry value is its refresh interval in days.")
+            @Comment("BLACKLIST (default): refresh every detected structure except IDs in tracked-structures; uses default-interval-days.\n"
+                + "WHITELIST: refresh only IDs in tracked-structures; each entry value is its refresh interval in days.")
             public String listMode = ListMode.BLACKLIST.name();
 
             @Setting("default-interval-days")
@@ -586,9 +633,9 @@ public final class PluginConfig implements Config {
             public int defaultIntervalDays = 14;
 
             @Setting("tracked-structures")
-            @Comment("Structure ID -> days map. Leave as {} to refresh all structures in BLACKLIST mode.\n" +
-                "BLACKLIST: listed IDs are excluded; their day values are ignored (example: minecraft:trial_chambers: 0).\n" +
-                "WHITELIST: only listed IDs refresh; set each value to its interval in days (example: minecraft:trial_chambers: 14).")
+            @Comment("Structure ID -> days map. Leave as {} to refresh all structures in BLACKLIST mode.\n"
+                + "BLACKLIST: listed IDs are excluded; their day values are ignored (example: minecraft:trial_chambers: 0).\n"
+                + "WHITELIST: only listed IDs refresh; set each value to its interval in days (example: minecraft:trial_chambers: 14).")
             public Map<String, Integer> trackedStructures = new LinkedHashMap<>();
 
             @Setting("check-interval-ticks")
@@ -596,8 +643,11 @@ public final class PluginConfig implements Config {
             public long checkIntervalTicks = 6000L;
 
             public ListMode listModeEnum() {
+                if (listMode == null) {
+                    return ListMode.WHITELIST;
+                }
                 try {
-                    return ListMode.valueOf(listMode.trim().toUpperCase(java.util.Locale.ROOT));
+                    return ListMode.valueOf(listMode.trim().toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException e) {
                     return ListMode.WHITELIST;
                 }
@@ -605,13 +655,13 @@ public final class PluginConfig implements Config {
 
             /** Whether a real detected structure id counts as a "structure" under the current list mode. */
             public boolean isTracked(String realStructureId) {
-                String key = github.freshchromatic.chunkrevive.feature.structure.StructureAliases.canonicalize(realStructureId);
+                String key = StructureAliases.canonicalize(realStructureId);
                 boolean inList = trackedStructures.containsKey(key);
                 return listModeEnum() == ListMode.WHITELIST ? inList : !inList;
             }
 
             public int getIntervalDays(String realStructureId) {
-                String key = github.freshchromatic.chunkrevive.feature.structure.StructureAliases.canonicalize(realStructureId);
+                String key = StructureAliases.canonicalize(realStructureId);
                 if (listModeEnum() == ListMode.WHITELIST) {
                     return trackedStructures.getOrDefault(key, defaultIntervalDays);
                 }
@@ -619,10 +669,13 @@ public final class PluginConfig implements Config {
             }
         }
 
-        public enum PartialClaimPolicy { EXCLUDE_CLAIMED, ABORT_WHOLE, IGNORE_CLAIMS }
+        public enum PartialClaimPolicy {
+            EXCLUDE_CLAIMED, ABORT_WHOLE, IGNORE_CLAIMS
+        }
 
         @ConfigSerializable
         public static class Protection {
+
             @Setting("radius-chunks")
             @Comment("Radius (chunks) players must stay within to accumulate protection time")
             public int radiusChunks = 3;
@@ -642,6 +695,7 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class EntityExemptions {
+
             @Setting("keep-ridden")
             public boolean keepRidden = true;
 
@@ -660,6 +714,7 @@ public final class PluginConfig implements Config {
 
         @ConfigSerializable
         public static class Regen {
+
             @Setting("regen-full-structure-range")
             @Comment("When regenerating a chunk that belongs to a structure group, regenerate the whole group as one batch")
             public boolean regenFullStructureRange = true;

@@ -22,7 +22,9 @@ public final class VanillaMaterialResolver implements MaterialResolver {
     @Override
     public ItemStack resolve(String materialTag, Player player) {
         String body = materialTag.trim().substring("[mc]".length()).trim();
-        if (body.isEmpty()) return null;
+        if (body.isEmpty()) {
+            return null;
+        }
 
         String materialId = body;
         String components = null;
@@ -33,7 +35,9 @@ public final class VanillaMaterialResolver implements MaterialResolver {
         }
 
         Material material = Material.matchMaterial(materialId.toUpperCase(Locale.ROOT));
-        if (material == null) return null;
+        if (material == null) {
+            return null;
+        }
 
         ItemStack stack = new ItemStack(material);
         if (components != null) {

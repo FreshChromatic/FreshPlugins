@@ -16,64 +16,54 @@ import github.freshchromatic.chunkrevive.feature.structure.StructureDetector;
 import github.freshchromatic.chunkrevive.feature.structure.StructureMarkExpander;
 import github.freshchromatic.chunkrevive.config.WorldAccessPolicy;
 import github.freshchromatic.freshlib.config.configurate.ConfigurateConfigManager;
-import github.freshchromatic.freshlib.database.Database;
 import github.freshchromatic.freshlib.util.Logging;
 import github.freshchromatic.chunkrevive.api.ChunkReviveApi;
 import github.freshchromatic.chunkrevive.application.api.DefaultChunkReviveApi;
+import github.freshchromatic.chunkrevive.infrastructure.persistence.PersistenceRepository;
 import github.freshchromatic.chunkrevive.infrastructure.update.ModrinthUpdateChecker;
 import org.bukkit.Bukkit;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 /** Owns the live component graph and its reload/shutdown ordering. */
 final class PluginRuntime {
-    private final ChunkRevivePlugin plugin;
-    private final ConfigurateConfigManager<PluginConfig> configManager;
-    private final ConfigurateConfigManager<Messages> messagesManager;
-    private final Database database;
-    private final MarkRegistry markRegistry;
-    private final ChunkDisplayService displayService;
-    private final StructureRegistry structureRegistry;
-    private final StructureRefreshScheduler structureRefreshScheduler;
-    private final StructureDetector structureDetector;
-    private final StructureMarkExpander structureMarkExpander;
-    private final StructureProtectionTracker structureProtectionTracker;
-    private final ChunkReviveCommand chunkReviveCommand;
-    private final KeepCommands keepCommands;
-    private final WorldAccessPolicy worldAccessPolicy;
-    private final DiskChunkScanner diskChunkScanner;
-    private final DeletionService deletionService;
-    private final DefaultChunkReviveApi publicApi;
-    private final ModrinthUpdateChecker updateChecker;
-    private final Map<String, Boolean> initialLandProviders;
 
-    PluginRuntime(
-            ChunkRevivePlugin plugin,
-            ConfigurateConfigManager<PluginConfig> configManager,
-            ConfigurateConfigManager<Messages> messagesManager,
-            Database database,
-            MarkRegistry markRegistry,
-            ChunkDisplayService displayService,
-            StructureRegistry structureRegistry,
-            StructureDetector structureDetector,
-            StructureMarkExpander structureMarkExpander,
-            StructureRefreshScheduler structureRefreshScheduler,
-            StructureProtectionTracker structureProtectionTracker,
-            ChunkReviveCommand chunkReviveCommand,
-            KeepCommands keepCommands,
-            WorldAccessPolicy worldAccessPolicy,
-            DiskChunkScanner diskChunkScanner,
-            DeletionService deletionService,
-            DefaultChunkReviveApi publicApi,
-            ModrinthUpdateChecker updateChecker) {
+    private final ChunkRevivePlugin                      plugin;
+    private final ConfigurateConfigManager<PluginConfig> configManager;
+    private final ConfigurateConfigManager<Messages>     messagesManager;
+    private final PersistenceRepository                  repository;
+    private final MarkRegistry                           markRegistry;
+    private final ChunkDisplayService                    displayService;
+    private final StructureRegistry                      structureRegistry;
+    private final StructureRefreshScheduler              structureRefreshScheduler;
+    private final StructureDetector                      structureDetector;
+    private final StructureMarkExpander                  structureMarkExpander;
+    private final StructureProtectionTracker             structureProtectionTracker;
+    private final ChunkReviveCommand                     chunkReviveCommand;
+    private final KeepCommands                           keepCommands;
+    private final WorldAccessPolicy                      worldAccessPolicy;
+    private final DiskChunkScanner                       diskChunkScanner;
+    private final DeletionService                        deletionService;
+    private final DefaultChunkReviveApi                  publicApi;
+    private final ModrinthUpdateChecker                  updateChecker;
+    private final Map<String, Boolean>                   initialLandProviders;
+
+    PluginRuntime(ChunkRevivePlugin plugin, ConfigurateConfigManager<PluginConfig> configManager,
+        ConfigurateConfigManager<Messages> messagesManager, PersistenceRepository repository, MarkRegistry markRegistry,
+        ChunkDisplayService displayService, StructureRegistry structureRegistry, StructureDetector structureDetector,
+        StructureMarkExpander structureMarkExpander, StructureRefreshScheduler structureRefreshScheduler,
+        StructureProtectionTracker structureProtectionTracker, ChunkReviveCommand chunkReviveCommand,
+        KeepCommands keepCommands, WorldAccessPolicy worldAccessPolicy, DiskChunkScanner diskChunkScanner,
+        DeletionService deletionService, DefaultChunkReviveApi publicApi, ModrinthUpdateChecker updateChecker) {
         this.plugin = plugin;
         this.configManager = configManager;
         this.messagesManager = messagesManager;
-        this.database = database;
+        this.repository = repository;
         this.markRegistry = markRegistry;
         this.displayService = displayService;
         this.structureRegistry = structureRegistry;
@@ -107,6 +97,9 @@ final class PluginRuntime {
         } catch (IOException e) {
             Logging.logger().severe("Failed to back up ChunkRevive configuration: " + e.getMessage());
             return false;
+        } catch (IllegalStateException e) {
+            Logging.logger().severe("Failed to save ChunkRevive configuration", e);
+            return false;
         }
 
         var config = configManager.config();
@@ -118,9 +111,14 @@ final class PluginRuntime {
         return true;
     }
 
-    void reload() {
-        configManager.load();
-        messagesManager.load();
+    boolean reload() {
+        var nextConfig = configManager.loadCandidate();
+        var nextMessages = messagesManager.loadCandidate();
+        if (nextConfig.isEmpty() || nextMessages.isEmpty()) {
+            return false;
+        }
+        configManager.applyLoaded(nextConfig.orElseThrow());
+        messagesManager.applyLoaded(nextMessages.orElseThrow());
 
         var config = configManager.config();
         var messages = messagesManager.config();
@@ -155,6 +153,7 @@ final class PluginRuntime {
         keepCommands.setMessages(messages);
         keepCommands.setConfig(config);
         updateChecker.start(config.updates);
+        return true;
     }
 
     private void warnProviderRestart(PluginConfig config) {
@@ -164,8 +163,8 @@ final class PluginRuntime {
     }
 
     private static Map<String, Boolean> providerEnablement(PluginConfig config) {
-        return PluginConfig.LandProtection.Providers.IDS.stream().collect(Collectors.toUnmodifiableMap(
-            id -> id, id -> config.landProtection.providers.byId(id).enabled));
+        return PluginConfig.LandProtection.Providers.IDS.stream().collect(Collectors.toUnmodifiableMap(id -> id,
+            id -> config.landProtection.providers.byId(id).enabled));
     }
 
     void stop() {
@@ -179,7 +178,17 @@ final class PluginRuntime {
         structureRefreshScheduler.stop();
         displayService.stop();
         updateChecker.stop();
-        database.close();
+        if (!publicApi.stopPersistence(Duration.ofSeconds(5))) {
+            Logging.logger().warning("Could not fully drain ChunkRevive operation records before database shutdown.");
+        }
+        repository.closeAsync().whenComplete((closed, failure) -> {
+            if (failure != null) {
+                Logging.logger().severe("Failed to close the ChunkRevive database connection in the background: "
+                    + failure.getMessage());
+            } else if (!closed) {
+                Logging.logger().warning("Could not close the ChunkRevive database connection.");
+            }
+        });
         NmsTerrainGenerator.shutdownPool();
     }
 

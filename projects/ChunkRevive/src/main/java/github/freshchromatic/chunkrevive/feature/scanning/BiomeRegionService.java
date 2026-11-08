@@ -15,20 +15,24 @@ import java.util.Set;
 
 /** Flood-fills the already-generated contiguous portion of a biome. */
 public final class BiomeRegionService {
+
     public record DetectResult(List<ChunkCoordinate> chunks, boolean truncated) {}
 
     private final DiskChunkSession disk;
-    private final ChunkStage minimumStage;
-    private final int maxChunks;
+    private final ChunkStage       minimumStage;
+    private final int              maxChunks;
 
     public BiomeRegionService(World world, ChunkStage minimumStage, int maxChunks) {
-        this.disk = NmsPlatformLoader.load().worldScan().openDiskSession(world);
+        this(NmsPlatformLoader.load().worldScan().openDiskSession(world), minimumStage, maxChunks);
+    }
+
+    BiomeRegionService(DiskChunkSession disk, ChunkStage minimumStage, int maxChunks) {
+        this.disk = disk;
         this.minimumStage = minimumStage;
         this.maxChunks = Math.max(1, maxChunks);
     }
 
-    public DetectResult detect(int startX, int startZ, Set<String> targets,
-                               BiomeMatcher matcher, BiomeMatchMode mode) {
+    public DetectResult detect(int startX, int startZ, Set<String> targets, BiomeMatcher matcher, BiomeMatchMode mode) {
         try (disk) {
             Set<Long> visited = new HashSet<>();
             List<ChunkCoordinate> result = new ArrayList<>();
@@ -41,15 +45,25 @@ public final class BiomeRegionService {
                 // A player can only invoke "here biome" from a fully loaded starting chunk. Treat
                 // that seed as existing even if its latest state has not reached the region file yet.
                 boolean seed = position.x() == startX && position.z() == startZ;
-                if (!seed && !disk.exists(position.x(), position.z(), minimumStage)) continue;
-                if (!matcher.matches(position.x(), position.z(), targets, mode)) continue;
+                if (!seed && !disk.exists(position.x(), position.z(), minimumStage)) {
+                    continue;
+                }
+                if (!matcher.matches(position.x(), position.z(), targets, mode)) {
+                    continue;
+                }
+                if (result.size() == maxChunks) {
+                    return new DetectResult(result, true);
+                }
                 result.add(position);
-                if (result.size() >= maxChunks) return new DetectResult(result, true);
                 for (int dx = -1; dx <= 1; dx++) {
                     for (int dz = -1; dz <= 1; dz++) {
-                        if (dx == 0 && dz == 0) continue;
+                        if (dx == 0 && dz == 0) {
+                            continue;
+                        }
                         int x = position.x() + dx, z = position.z() + dz;
-                        if (visited.add(key(x, z))) queue.add(new ChunkCoordinate(x, z));
+                        if (visited.add(key(x, z))) {
+                            queue.add(new ChunkCoordinate(x, z));
+                        }
                     }
                 }
             }

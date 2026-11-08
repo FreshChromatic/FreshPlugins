@@ -1,3 +1,12 @@
 package github.freshchromatic.chunkrevive.api.operation;
+
 import java.util.UUID;
-public record OperationId(UUID value) { }
+
+public record OperationId(UUID value) {
+
+    public OperationId {
+        if (value == null) {
+            throw new IllegalArgumentException("value must not be null");
+        }
+    }
+}

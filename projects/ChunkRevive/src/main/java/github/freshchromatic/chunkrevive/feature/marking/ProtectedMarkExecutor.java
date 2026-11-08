@@ -15,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 public final class ProtectedMarkExecutor {
+
     public record BatchResult(List<MarkedChunk> eligible, List<MarkedChunk> added) {}
 
     private final Consumer<Runnable> schedule;
@@ -31,7 +32,7 @@ public final class ProtectedMarkExecutor {
         this.checks = checks;
     }
 
-    public CompletableFuture<MarkResult> mark(String world, int x, int z, UUID actor, boolean persisted) {
+    public CompletableFuture<MarkResult> mark(String world, int x, int z, UUID actor) {
         var result = new CompletableFuture<MarkResult>();
         runGlobal(result, () -> {
             long revision = checks.revision();
@@ -41,11 +42,14 @@ public final class ProtectedMarkExecutor {
                 return;
             }
             ChunkKey startingChunk = new ChunkKey(world, x, z);
-            List<ChunkKey> keys = candidates.stream().map(chunk -> new ChunkKey(chunk.world(), chunk.cx(), chunk.cz())).toList();
+            List<ChunkKey> keys = candidates.stream()
+                .map(chunk -> new ChunkKey(chunk.world(), chunk.cx(),
+                chunk.cz()))
+                .toList();
             var startCheck = checks.check(MaintenanceAction.MARK, List.of(startingChunk)).toCompletableFuture();
             var rangeCheck = checks.checkExternal(MaintenanceAction.MARK, keys).toCompletableFuture();
-            startCheck.thenCombine(rangeCheck, (start, range) ->
-                denied(start, List.of(startingChunk)) || denied(range, keys)).whenComplete((blocked, failure) -> {
+            startCheck.thenCombine(rangeCheck, (start, range) -> denied(start, List.of(startingChunk)) || denied(range,
+                keys)).whenComplete((blocked, failure) -> {
                     if (failure != null) {
                         result.completeExceptionally(failure);
                         return;
@@ -60,27 +64,36 @@ public final class ProtectedMarkExecutor {
                             result.complete(MarkResult.RESIDENCE_BLOCKED);
                             return;
                         }
-                        if (persisted) {
-                            registry.markResolvedPersisted(current).whenComplete((status, error) -> {
-                                if (error == null) result.complete(status);
-                                else result.completeExceptionally(error);
+                        registry.markResolvedPersisted(current).whenComplete((status, error) -> {
+                            if (error != null) {
+                                result.completeExceptionally(error);
+                                return;
+                            }
+                            if (status != MarkResult.SUCCESS) {
+                                result.complete(status);
+                                return;
+                            }
+                            runGlobal(result, () -> {
+                                current.forEach(chunk -> registry.refreshMarkedDisplay(chunk.world(), chunk.cx(),
+                                    chunk.cz()));
+                                result.complete(status);
                             });
-                        } else {
-                            result.complete(registry.markResolved(current));
-                        }
+                        });
                     });
                 });
         });
         return result;
     }
 
-    public CompletableFuture<BatchResult> markBatch(List<MarkedChunk> chunks, boolean batched) {
+    public CompletableFuture<BatchResult> markBatch(List<MarkedChunk> chunks) {
         var result = new CompletableFuture<BatchResult>();
         List<MarkedChunk> candidates = List.copyOf(chunks);
         runGlobal(result, () -> {
             long revision = checks.revision();
             List<ChunkKey> keys = candidates.stream()
-                .map(chunk -> new ChunkKey(chunk.world(), chunk.cx(), chunk.cz())).toList();
+                .map(chunk -> new ChunkKey(chunk.world(), chunk.cx(),
+                chunk.cz()))
+                .toList();
             checks.checkExternal(MaintenanceAction.MARK, keys).whenComplete((decision, failure) -> {
                 if (failure != null) {
                     result.completeExceptionally(failure);
@@ -90,21 +103,39 @@ public final class ProtectedMarkExecutor {
                     if (decision == null || revision != checks.revision()) {
                         throw new IllegalStateException("Protection changed during marking");
                     }
-                    List<MarkedChunk> eligible = candidates.stream().filter(chunk ->
-                        decision.decisions().getOrDefault(new ChunkKey(chunk.world(), chunk.cx(), chunk.cz()),
-                            ProtectionDecision.ABSTAIN) != ProtectionDecision.DENY).toList();
-                    List<MarkedChunk> added = batched
-                        ? registry.markChunksBatch(eligible) : registry.markChunksDirect(eligible);
-                    result.complete(new BatchResult(eligible, added));
+                    List<MarkedChunk> eligible = candidates.stream()
+                        .filter(chunk -> decision.decisions().getOrDefault(new ChunkKey(chunk.world(), chunk.cx(), chunk.cz()), ProtectionDecision.ABSTAIN) != ProtectionDecision.DENY)
+                        .toList();
+                    persistBatch(eligible, result);
                 });
             });
         });
         return result;
     }
 
+    public CompletableFuture<BatchResult> markBatchWithoutProtection(List<MarkedChunk> chunks) {
+        var result = new CompletableFuture<BatchResult>();
+        List<MarkedChunk> candidates = List.copyOf(chunks);
+        runGlobal(result, () -> persistBatch(candidates, result));
+        return result;
+    }
+
+    private void persistBatch(List<MarkedChunk> eligible, CompletableFuture<BatchResult> result) {
+        registry.markChunksPersisted(eligible).whenComplete((added, failure) -> {
+            if (failure != null) {
+                result.completeExceptionally(failure);
+                return;
+            }
+            runGlobal(result, () -> {
+                added.forEach(chunk -> registry.refreshMarkedDisplay(chunk.world(), chunk.cx(), chunk.cz()));
+                result.complete(new BatchResult(eligible, added));
+            });
+        });
+    }
+
     private static boolean denied(ProtectionBatchResult result, List<ChunkKey> chunks) {
-        return result == null || chunks.stream().anyMatch(chunk ->
-            result.decisions().getOrDefault(chunk, ProtectionDecision.ABSTAIN) == ProtectionDecision.DENY);
+        return result == null || chunks.stream().anyMatch(chunk -> result.decisions().getOrDefault(chunk,
+            ProtectionDecision.ABSTAIN) == ProtectionDecision.DENY);
     }
 
     private void runGlobal(CompletableFuture<?> result, Runnable task) {

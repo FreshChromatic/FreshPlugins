@@ -16,17 +16,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DefaultIntegrationApiTest {
+
     @Test
     void disabledBuiltInProviderContinuesToDenyMaintenance() {
         var enabled = new java.util.concurrent.atomic.AtomicBoolean(true);
-        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
-            (proxy, method, args) -> switch (method.getName()) {
+        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[] { Plugin.class }, (
+            proxy, method, args) -> switch (method.getName()) {
                 case "isEnabled" -> enabled.get();
                 case "getName" -> "Example";
                 case "equals" -> proxy == args[0];
@@ -34,8 +38,14 @@ class DefaultIntegrationApiTest {
             });
         var api = new DefaultIntegrationApi();
         api.builtInRegistrar().registerProtectionProvider(owner, new ProtectionProvider() {
-            @Override public String id() { return "built-in"; }
-            @Override public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+
+            @Override
+            public String id() {
+                return "built-in";
+            }
+
+            @Override
+            public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
                 return CompletableFuture.completedFuture(new ProtectionBatchResult(Map.of(), Map.of()));
             }
         });
@@ -50,16 +60,22 @@ class DefaultIntegrationApiTest {
 
     @Test
     void synchronousProviderFailureDeniesTheAffectedChunk() {
-        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
-            (proxy, method, args) -> switch (method.getName()) {
+        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[] { Plugin.class }, (
+            proxy, method, args) -> switch (method.getName()) {
                 case "isEnabled" -> true;
                 case "getName" -> "Example";
                 default -> null;
             });
         var api = new DefaultIntegrationApi();
         api.registerProtectionProvider(owner, new ProtectionProvider() {
-            @Override public String id() { return "example"; }
-            @Override public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+
+            @Override
+            public String id() {
+                return "example";
+            }
+
+            @Override
+            public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
                 throw new IllegalStateException("unavailable");
             }
         });
@@ -70,9 +86,40 @@ class DefaultIntegrationApiTest {
     }
 
     @Test
+    void providerReturningBlankReasonCodeFallsBackToUnavailableDenial() {
+        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[] { Plugin.class }, (
+            proxy, method, args) -> switch (method.getName()) {
+                case "isEnabled" -> true;
+                case "getName" -> "Example";
+                default -> null;
+            });
+        var api = new DefaultIntegrationApi();
+        api.registerProtectionProvider(owner, new ProtectionProvider() {
+
+            @Override
+            public String id() {
+                return "example";
+            }
+
+            @Override
+            public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+                ChunkKey chunk = query.chunks().iterator().next();
+                return CompletableFuture.completedFuture(new ProtectionBatchResult(Map.of(chunk,
+                    ProtectionDecision.DENY), Map.of(chunk, " ")));
+            }
+        });
+        var chunk = new ChunkKey("world", 1, 2);
+
+        var result = api.check(MaintenanceAction.DELETE_CHUNK, List.of(chunk)).toCompletableFuture().join();
+
+        assertEquals(ProtectionDecision.DENY, result.decisions().get(chunk));
+        assertEquals("PROVIDER_UNAVAILABLE:example", result.reasonCodes().get(chunk));
+    }
+
+    @Test
     void asynchronousProviderCanDenyWithoutBlockingTheCaller() {
-        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
-            (proxy, method, args) -> switch (method.getName()) {
+        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[] { Plugin.class }, (
+            proxy, method, args) -> switch (method.getName()) {
                 case "isEnabled" -> true;
                 case "getName" -> "Example";
                 default -> null;
@@ -80,8 +127,16 @@ class DefaultIntegrationApiTest {
         var pending = new CompletableFuture<ProtectionBatchResult>();
         var api = new DefaultIntegrationApi();
         api.registerProtectionProvider(owner, new ProtectionProvider() {
-            @Override public String id() { return "example"; }
-            @Override public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) { return pending; }
+
+            @Override
+            public String id() {
+                return "example";
+            }
+
+            @Override
+            public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+                return pending;
+            }
         });
         var chunk = new ChunkKey("world", 1, 2);
         var result = api.check(MaintenanceAction.MARK, List.of(chunk)).toCompletableFuture();
@@ -91,9 +146,40 @@ class DefaultIntegrationApiTest {
     }
 
     @Test
+    void asynchronousFatalProviderFailureIsNotConvertedToDenial() {
+        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[] { Plugin.class }, (
+            proxy, method, args) -> switch (method.getName()) {
+                case "isEnabled" -> true;
+                case "getName" -> "Example";
+                default -> null;
+            });
+        var api = new DefaultIntegrationApi();
+        api.registerProtectionProvider(owner, new ProtectionProvider() {
+
+            @Override
+            public String id() {
+                return "example";
+            }
+
+            @Override
+            public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+                return CompletableFuture.failedFuture(new AssertionError("fatal provider failure"));
+            }
+        });
+        var chunk = new ChunkKey("world", 1, 2);
+
+        CompletionException failure = assertThrows(CompletionException.class, () ->
+            api.check(MaintenanceAction.MARK, List.of(chunk))
+                .toCompletableFuture()
+                .join());
+
+        assertInstanceOf(AssertionError.class, failure.getCause());
+    }
+
+    @Test
     void changesDuringAnAsynchronousCheckInvalidateItsResult() {
-        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
-            (proxy, method, args) -> switch (method.getName()) {
+        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[] { Plugin.class }, (
+            proxy, method, args) -> switch (method.getName()) {
                 case "isEnabled" -> true;
                 case "getName" -> "Example";
                 default -> null;
@@ -101,8 +187,16 @@ class DefaultIntegrationApiTest {
         var pending = new CompletableFuture<ProtectionBatchResult>();
         var api = new DefaultIntegrationApi();
         var registration = api.registerProtectionProvider(owner, new ProtectionProvider() {
-            @Override public String id() { return "example"; }
-            @Override public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) { return pending; }
+
+            @Override
+            public String id() {
+                return "example";
+            }
+
+            @Override
+            public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+                return pending;
+            }
         });
         var chunk = new ChunkKey("world", 1, 2);
         var result = api.check(MaintenanceAction.MARK, List.of(chunk)).toCompletableFuture();
@@ -114,8 +208,8 @@ class DefaultIntegrationApiTest {
 
     @Test
     void externalOnlyCheckDoesNotOverrideBuiltInStructurePolicies() {
-        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
-            (proxy, method, args) -> switch (method.getName()) {
+        Plugin owner = (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[] { Plugin.class }, (
+            proxy, method, args) -> switch (method.getName()) {
                 case "isEnabled" -> true;
                 case "getName" -> "Example";
                 default -> null;
@@ -123,16 +217,27 @@ class DefaultIntegrationApiTest {
         var api = new DefaultIntegrationApi();
         var chunk = new ChunkKey("world", 1, 2);
         api.builtInRegistrar().registerProtectionProvider(owner, new ProtectionProvider() {
-            @Override public String id() { return "built-in"; }
-            @Override public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
-                return CompletableFuture.completedFuture(new ProtectionBatchResult(
-                    Map.of(chunk, ProtectionDecision.DENY), Map.of()));
+
+            @Override
+            public String id() {
+                return "built-in";
+            }
+
+            @Override
+            public CompletionStage<ProtectionBatchResult> check(ProtectionQuery query) {
+                return CompletableFuture.completedFuture(new ProtectionBatchResult(Map.of(chunk,
+                    ProtectionDecision.DENY), Map.of()));
             }
         });
-        assertEquals(ProtectionDecision.DENY,
-            api.check(MaintenanceAction.MARK, List.of(chunk)).toCompletableFuture().join().decisions().get(chunk));
-        assertEquals(ProtectionDecision.ABSTAIN,
-            api.checkExternal(MaintenanceAction.MARK, List.of(chunk)).toCompletableFuture().join()
-                .decisions().getOrDefault(chunk, ProtectionDecision.ABSTAIN));
+        assertEquals(ProtectionDecision.DENY, api.check(MaintenanceAction.MARK, List.of(chunk))
+            .toCompletableFuture()
+            .join()
+            .decisions()
+            .get(chunk));
+        assertEquals(ProtectionDecision.ABSTAIN, api.checkExternal(MaintenanceAction.MARK, List.of(chunk))
+            .toCompletableFuture()
+            .join()
+            .decisions()
+            .getOrDefault(chunk, ProtectionDecision.ABSTAIN));
     }
 }

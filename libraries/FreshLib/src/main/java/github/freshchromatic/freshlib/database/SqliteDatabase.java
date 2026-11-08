@@ -1,5 +1,6 @@
 package github.freshchromatic.freshlib.database;
 
+import github.freshchromatic.freshlib.util.Logging;
 import org.bukkit.Bukkit;
 
 import java.io.File;
@@ -8,7 +9,7 @@ import java.sql.DriverManager;
 public class SqliteDatabase extends MySqlDatabase {
 
     protected final String path;
-    protected File file;
+    protected File         file;
 
     public SqliteDatabase(String path) {
         super(null, null, null, null, null);
@@ -34,7 +35,7 @@ public class SqliteDatabase extends MySqlDatabase {
             connection = DriverManager.getConnection("jdbc:sqlite:" + file.getPath());
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            Logging.logger().severe("Could not connect to SQLite: " + e.getMessage(), e);
             return false;
         }
     }

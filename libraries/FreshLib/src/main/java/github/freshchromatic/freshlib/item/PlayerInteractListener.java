@@ -5,21 +5,28 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 public class PlayerInteractListener implements Listener {
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
-        try {
-            ItemStack item = event.getItem();
-            if (event.getHand() == EquipmentSlot.HAND && item.getItemMeta().getPersistentDataContainer().has(ItemClick.ON_CLICK_KEY)) {
-                String id = item.getItemMeta().getPersistentDataContainer().get(ItemClick.ON_CLICK_KEY, PersistentDataType.STRING);
-
-                ItemClickRegistry.getItemClick(id).onClick(event, event.getPlayer());
-            }
-        } catch (NullPointerException ignore) {
+        if (event.getHand() != EquipmentSlot.HAND) {
+            return;
         }
+        ItemStack item = event.getItem();
+        if (item == null) {
+            return;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+        String id = meta.getPersistentDataContainer().get(ItemClick.ON_CLICK_KEY, PersistentDataType.STRING);
+        if (id == null) {
+            return;
+        }
+        ItemClickRegistry.getItemClick(id).onClick(event, event.getPlayer());
     }
-
 }

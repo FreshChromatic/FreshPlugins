@@ -1,10 +1,10 @@
 package github.freshchromatic.chunkrevive.config;
 
-import github.freshchromatic.chunkrevive.config.PluginConfig;
-
 public final class WorldAccessPolicy {
 
-    public enum Scope { MANUAL_MARK, BULK_MARK, STRUCTURE_AUTO_DETECT, STRUCTURE_REFRESH, REGEN }
+    public enum Scope {
+        MANUAL_MARK, BULK_MARK, STRUCTURE_AUTO_DETECT, STRUCTURE_REFRESH, REGEN
+    }
 
     private PluginConfig config;
 
@@ -25,7 +25,9 @@ public final class WorldAccessPolicy {
             case STRUCTURE_REFRESH -> cfg.scope.structureRefresh;
             case REGEN -> cfg.scope.regen;
         };
-        if (!guarded) return true;
+        if (!guarded) {
+            return true;
+        }
 
         boolean inList = cfg.list.contains(worldName);
         return cfg.modeEnum() == PluginConfig.Worlds.ListMode.WHITELIST ? inList : !inList;

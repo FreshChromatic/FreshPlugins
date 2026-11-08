@@ -4,6 +4,7 @@ import org.ashin.chunkClaimPlugin2.api.ChunkClaimAPI;
 import org.bukkit.World;
 
 final class ChunkClaimProtection extends ExternalProtection {
+
     ChunkClaimProtection() {
         super("CCP");
     }

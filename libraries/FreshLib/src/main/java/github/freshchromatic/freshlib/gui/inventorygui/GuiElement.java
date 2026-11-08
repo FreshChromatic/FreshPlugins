@@ -31,9 +31,10 @@ import org.bukkit.inventory.ItemStack;
  * Represents an element in a gui
  */
 public abstract class GuiElement {
-    private final char slotChar;
-    private Action action;
-    protected int[] slots = new int[0];
+
+    private final char     slotChar;
+    private Action         action;
+    protected int[]        slots = new int[0];
     protected InventoryGui gui;
 
     /**
@@ -171,14 +172,16 @@ public abstract class GuiElement {
     }
 
     public static class Click {
-        private final InventoryGui gui;
-        private final int slot;
-        private final ClickType clickType;
-        private ItemStack cursor;
-        private final GuiElement element;
+
+        private final InventoryGui           gui;
+        private final int                    slot;
+        private final ClickType              clickType;
+        private ItemStack                    cursor;
+        private final GuiElement             element;
         private final InventoryInteractEvent event;
 
-        public Click(InventoryGui gui, int slot, ClickType clickType, ItemStack cursor, GuiElement element, InventoryInteractEvent event) {
+        public Click(InventoryGui gui, int slot, ClickType clickType, ItemStack cursor, GuiElement element,
+            InventoryInteractEvent event) {
             this.gui = gui;
             this.slot = slot;
             this.clickType = clickType;
@@ -248,4 +251,3 @@ public abstract class GuiElement {
         }
     }
 }
-

@@ -35,16 +35,18 @@ public class Scheduler {
     private static final PlatformScheduler platformScheduler = initializePlatformScheduler();
 
     private static PlatformScheduler initializePlatformScheduler() {
+        String implementation;
         try {
             Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
-            return (PlatformScheduler) Class.forName("github.freshchromatic.freshlib.scheduler.platform.folia.FoliaScheduler").getConstructor().newInstance();
-        } catch (Throwable ignored) {}
-        try {
-            return (PlatformScheduler) Class.forName("github.freshchromatic.freshlib.scheduler.platform.bukkit.BukkitScheduler").getConstructor().newInstance();
-        } catch (Throwable e) {
-            e.printStackTrace();
+            implementation = "github.freshchromatic.freshlib.scheduler.platform.folia.FoliaScheduler";
+        } catch (ClassNotFoundException absent) {
+            implementation = "github.freshchromatic.freshlib.scheduler.platform.bukkit.BukkitScheduler";
         }
-        throw new IllegalArgumentException("Unable to find suitable implementation of PlatformScheduler");
+        try {
+            return (PlatformScheduler) Class.forName(implementation).getConstructor().newInstance();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to initialize platform scheduler " + implementation, e);
+        }
     }
 
     public static PlatformScheduler getPlatform() {
@@ -127,11 +129,13 @@ public class Scheduler {
         return new ScheduledTask(platformScheduler.runTask(plugin, task, retired, entity));
     }
 
-    public static ScheduledTask runTaskLater(Plugin plugin, Runnable task, Runnable retired, long delay, Entity entity) {
+    public static ScheduledTask runTaskLater(Plugin plugin, Runnable task, Runnable retired, long delay,
+        Entity entity) {
         return new ScheduledTask(platformScheduler.runTaskLater(plugin, task, retired, delay, entity));
     }
 
-    public static ScheduledTask runTaskTimer(Plugin plugin, Runnable task, Runnable retired, long delay, long period, Entity entity) {
+    public static ScheduledTask runTaskTimer(Plugin plugin, Runnable task, Runnable retired, long delay, long period,
+        Entity entity) {
         return new ScheduledTask(platformScheduler.runTaskTimer(plugin, task, retired, delay, period, entity));
     }
 
@@ -163,11 +167,13 @@ public class Scheduler {
         return new ScheduledTask(platformScheduler.runTask(plugin, task, world, chunkX, chunkZ));
     }
 
-    public static ScheduledTask runTaskLater(Plugin plugin, Runnable task, long delay, World world, int chunkX, int chunkZ) {
+    public static ScheduledTask runTaskLater(Plugin plugin, Runnable task, long delay, World world, int chunkX,
+        int chunkZ) {
         return new ScheduledTask(platformScheduler.runTaskLater(plugin, task, delay, world, chunkX, chunkZ));
     }
 
-    public static ScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period, World world, int chunkX, int chunkZ) {
+    public static ScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period, World world,
+        int chunkX, int chunkZ) {
         return new ScheduledTask(platformScheduler.runTaskTimer(plugin, task, delay, period, world, chunkX, chunkZ));
     }
 
@@ -182,7 +188,7 @@ public class Scheduler {
     public static ScheduledTask runTaskTimer(Plugin plugin, Runnable task, long delay, long period) {
         return new ScheduledTask(platformScheduler.runTaskTimer(plugin, task, delay, period));
     }
-    
+
     public static ScheduledTask runTaskAsynchronously(Plugin plugin, Runnable task) {
         return new ScheduledTask(platformScheduler.runTaskAsynchronously(plugin, task));
     }
@@ -190,11 +196,11 @@ public class Scheduler {
     public static ScheduledTask runTaskLaterAsynchronously(Plugin plugin, Runnable task, long delay) {
         return new ScheduledTask(platformScheduler.runTaskLaterAsynchronously(plugin, task, delay));
     }
-    
+
     public static ScheduledTask runTaskTimerAsynchronously(Plugin plugin, Runnable task, long delay, long period) {
         return new ScheduledTask(platformScheduler.runTaskTimerAsynchronously(plugin, task, delay, period));
     }
-    
+
     public static <T> Future<T> callSyncMethod(Plugin plugin, Callable<T> task, Entity entity) {
         return platformScheduler.callSyncMethod(plugin, task, entity);
     }
@@ -202,7 +208,7 @@ public class Scheduler {
     public static <T> Future<T> callSyncMethod(Plugin plugin, Callable<T> task, Callable<T> retired, Entity entity) {
         return platformScheduler.callSyncMethod(plugin, task, retired, entity);
     }
-    
+
     public static <T> Future<T> callSyncMethod(Plugin plugin, Callable<T> task, Location location) {
         return platformScheduler.callSyncMethod(plugin, task, location);
     }
@@ -214,7 +220,7 @@ public class Scheduler {
     public static <T> Future<T> callSyncMethod(Plugin plugin, Callable<T> task, World world, int chunkX, int chunkZ) {
         return platformScheduler.callSyncMethod(plugin, task, world, chunkX, chunkZ);
     }
-    
+
     public static <T> Future<T> callSyncMethod(Plugin plugin, Callable<T> task) {
         return platformScheduler.callSyncMethod(plugin, task);
     }
@@ -222,5 +228,5 @@ public class Scheduler {
     public static boolean teleport(Entity entity, Location location) {
         return platformScheduler.teleport(entity, location);
     }
-    
+
 }

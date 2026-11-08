@@ -1,18 +1,20 @@
 package github.freshchromatic.freshlib.item;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ItemClickRegistry {
 
-    private static final Map<String, ItemClick> itemClickMap = new HashMap<>();
+    private static final Map<String, ItemClick> itemClickMap = new ConcurrentHashMap<>();
 
     public static ItemClick getItemClick(String id) {
-        return itemClickMap.getOrDefault(id, ItemClick.EMPTY);
+        return id == null ? ItemClick.EMPTY : itemClickMap.getOrDefault(id, ItemClick.EMPTY);
     }
 
     public static void registerItemClick(ItemClick itemClick) {
-        itemClickMap.put(itemClick.getId(), itemClick);
+        Objects.requireNonNull(itemClick);
+        itemClickMap.put(Objects.requireNonNull(itemClick.getId()), itemClick);
     }
 
 }

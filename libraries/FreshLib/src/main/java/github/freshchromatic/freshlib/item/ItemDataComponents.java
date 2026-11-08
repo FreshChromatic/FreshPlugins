@@ -16,7 +16,9 @@ public final class ItemDataComponents {
     }
 
     public static void applyCustomModelData(ItemMeta meta, String raw) {
-        if (raw == null || raw.isBlank()) return;
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
         try {
             meta.setCustomModelData(Integer.parseInt(raw.trim()));
         } catch (NumberFormatException e) {
@@ -39,19 +41,25 @@ public final class ItemDataComponents {
     }
 
     public static void applyHideTooltip(ItemMeta meta, Boolean hide) {
-        if (hide == null) return;
+        if (hide == null) {
+            return;
+        }
         meta.setHideTooltip(hide);
     }
 
     public static void applyDamage(ItemMeta meta, Integer damage) {
-        if (damage == null) return;
+        if (damage == null) {
+            return;
+        }
         if (meta instanceof Damageable damageable) {
             damageable.setDamage(damage);
         }
     }
 
     private static NamespacedKey parseKey(String raw, String fieldName) {
-        if (raw == null || raw.isBlank()) return null;
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
         NamespacedKey key = NamespacedKey.fromString(raw.trim());
         if (key == null) {
             Logging.logger().warning("Invalid " + fieldName + " namespaced key: \"" + raw + "\"");

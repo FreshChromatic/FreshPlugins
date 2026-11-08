@@ -4,15 +4,21 @@ import org.bukkit.Bukkit;
 
 /** Selects a version adapter without loading implementation classes from unsupported adapters. */
 public final class NmsPlatformLoader {
+
     private static volatile NmsPlatform loaded;
 
-    private NmsPlatformLoader() {}
+    private NmsPlatformLoader() {
+    }
 
     public static NmsPlatform load() {
         NmsPlatform current = loaded;
-        if (current != null) return current;
+        if (current != null) {
+            return current;
+        }
         synchronized (NmsPlatformLoader.class) {
-            if (loaded == null) loaded = discover();
+            if (loaded == null) {
+                loaded = discover();
+            }
             return loaded;
         }
     }
@@ -24,19 +30,17 @@ public final class NmsPlatformLoader {
                 "github.freshchromatic.chunkrevive.nms.v1_21_11.V1_21_11NmsPlatformProvider", 21);
             case "26.1.2" -> new AdapterDescriptor(
                 "github.freshchromatic.chunkrevive.nms.v26_1_2.V26_1_2NmsPlatformProvider", 25);
-            case "26.2" -> new AdapterDescriptor(
-                "github.freshchromatic.chunkrevive.nms.v26_2.V26_2NmsPlatformProvider", 25);
-            case "26.3" -> new AdapterDescriptor(
-                "github.freshchromatic.chunkrevive.nms.v26_3.V26_3NmsPlatformProvider", 25);
-            default -> throw new IllegalStateException(
-                "ChunkRevive does not support Minecraft " + minecraftVersion);
+            case "26.2" -> new AdapterDescriptor("github.freshchromatic.chunkrevive.nms.v26_2.V26_2NmsPlatformProvider",
+                25);
+            case "26.3" -> new AdapterDescriptor("github.freshchromatic.chunkrevive.nms.v26_3.V26_3NmsPlatformProvider",
+                25);
+            default -> throw new IllegalStateException("ChunkRevive does not support Minecraft " + minecraftVersion);
         };
 
         int runtimeFeature = Runtime.version().feature();
         if (runtimeFeature < adapter.minimumJavaFeature()) {
-            throw new IllegalStateException(
-                "Minecraft " + minecraftVersion + " requires Java "
-                    + adapter.minimumJavaFeature() + "; the server is running Java " + runtimeFeature);
+            throw new IllegalStateException("Minecraft " + minecraftVersion + " requires Java "
+                + adapter.minimumJavaFeature() + "; the server is running Java " + runtimeFeature);
         }
 
         try {
@@ -47,9 +51,8 @@ public final class NmsPlatformLoader {
                 .newInstance();
             return provider.create();
         } catch (ReflectiveOperationException | LinkageError exception) {
-            throw new IllegalStateException(
-                "Could not load the ChunkRevive NMS adapter for Minecraft " + minecraftVersion,
-                exception);
+            throw new IllegalStateException("Could not load the ChunkRevive NMS adapter for Minecraft "
+                + minecraftVersion, exception);
         }
     }
 

@@ -14,7 +14,7 @@ import java.nio.file.Path;
 public class YamlConfigLoaderProvider implements ConfigLoaderProvider<YamlConfigurationLoader> {
 
     private final ConfigurationOptions options;
-    private final NodeStyle nodeStyle;
+    private final NodeStyle            nodeStyle;
 
     public YamlConfigLoaderProvider() {
         this(null, NodeStyle.BLOCK);
@@ -31,9 +31,7 @@ public class YamlConfigLoaderProvider implements ConfigLoaderProvider<YamlConfig
 
     @Override
     public YamlConfigurationLoader createLoader(Path path) {
-        YamlConfigurationLoader.Builder builder = YamlConfigurationLoader.builder()
-                .path(path)
-                .nodeStyle(nodeStyle);
+        YamlConfigurationLoader.Builder builder = YamlConfigurationLoader.builder().path(path).nodeStyle(nodeStyle);
 
         if (options != null) {
             builder.defaultOptions(options);

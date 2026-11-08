@@ -8,7 +8,10 @@ import java.util.Collection;
 import java.util.concurrent.CompletionStage;
 
 public interface ProtectionChecks {
+
     long revision();
+
     CompletionStage<ProtectionBatchResult> check(MaintenanceAction action, Collection<ChunkKey> chunks);
+
     CompletionStage<ProtectionBatchResult> checkExternal(MaintenanceAction action, Collection<ChunkKey> chunks);
 }

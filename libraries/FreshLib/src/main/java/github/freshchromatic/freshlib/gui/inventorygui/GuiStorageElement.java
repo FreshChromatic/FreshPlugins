@@ -41,11 +41,12 @@ import java.util.function.Function;
  * accessed by the player then it will translate to the second slot in the inventory.
  */
 public class GuiStorageElement extends GuiElement {
+
     private final static String STORAGE_SYSTEM_PROPERTY = GuiStorageElement.class.getName() + ".forceAllow";
 
-    private final Inventory storage;
-    private final int invSlot;
-    private Runnable applyStorage;
+    private final Inventory                  storage;
+    private final int                        invSlot;
+    private Runnable                         applyStorage;
     private Function<ValidatorInfo, Boolean> placeValidator;
     private Function<ValidatorInfo, Boolean> takeValidator;
 
@@ -77,7 +78,8 @@ public class GuiStorageElement extends GuiElement {
      * @param placeValidator Should return <code>false</code> for items that should not work in that slot
      *                      Can be null if the storage is directly linked.
      */
-    public GuiStorageElement(char slotChar, Inventory storage, int invSlot, Runnable applyStorage, Function<ValidatorInfo, Boolean> placeValidator) {
+    public GuiStorageElement(char slotChar, Inventory storage, int invSlot, Runnable applyStorage,
+        Function<ValidatorInfo, Boolean> placeValidator) {
         this(slotChar, storage, invSlot, applyStorage, placeValidator, null);
     }
 
@@ -92,10 +94,12 @@ public class GuiStorageElement extends GuiElement {
      * @param takeValidator Should return <code>false</code> for items that should not be takeable in that slot
      *                      Can be null if the storage is directly linked.
      */
-    public GuiStorageElement(char slotChar, Inventory storage, int invSlot, Runnable applyStorage, Function<ValidatorInfo, Boolean> placeValidator, Function<ValidatorInfo, Boolean> takeValidator) {
+    public GuiStorageElement(char slotChar, Inventory storage, int invSlot, Runnable applyStorage,
+        Function<ValidatorInfo, Boolean> placeValidator, Function<ValidatorInfo, Boolean> takeValidator) {
         super(slotChar, null);
         if (Bukkit.getUnsafe().getDataVersion() < 4554 && !Boolean.getBoolean(STORAGE_SYSTEM_PROPERTY)) {
-            throw new UnsupportedOperationException("GuiStorageElements require server version 1.21.9 or later to work properly!"
+            throw new UnsupportedOperationException(
+                "GuiStorageElements require server version 1.21.9 or later to work properly!"
                     + " If you understand the risk and only want to use this element for internal use you can disable this check"
                     + " by setting the system property " + STORAGE_SYSTEM_PROPERTY + "=true");
         }
@@ -110,17 +114,17 @@ public class GuiStorageElement extends GuiElement {
             ItemStack storageItem = getStorageItem(click.getWhoClicked(), click.getSlot());
             ItemStack slotItem = GuiView.of(click.getRawEvent().getView()).getTopInventory().getItem(click.getSlot());
 
-            if (click.getType() == ClickType.RIGHT && (
-                    click.getCursor() != null && click.getCursor().getType().getKey().getKey().contains("bundle")
-                            || storageItem != null && storageItem.getType().getKey().getKey().contains("bundle")
-                            || slotItem != null && slotItem.getType().getKey().getKey().contains("bundle"))) {
+            if (click.getType() == ClickType.RIGHT && (click.getCursor() != null
+                && click.getCursor().getType().getKey().getKey().contains("bundle") || storageItem != null
+                    && storageItem.getType().getKey().getKey().contains("bundle") || slotItem != null
+                        && slotItem.getType().getKey().getKey().contains("bundle"))) {
                 gui.draw(click.getWhoClicked(), false);
                 return true;
             }
 
-            if (slotItem == null && storageItem != null && storageItem.getType() != Material.AIR
-                    || storageItem == null && slotItem != null && slotItem.getType() != Material.AIR
-                    || storageItem != null && !storageItem.equals(slotItem)) {
+            if (slotItem == null && storageItem != null && storageItem.getType() != Material.AIR || storageItem == null
+                && slotItem != null && slotItem.getType() != Material.AIR || storageItem != null && !storageItem.equals(
+                    slotItem)) {
                 gui.draw(click.getWhoClicked(), false);
                 return true;
             }
@@ -212,7 +216,9 @@ public class GuiStorageElement extends GuiElement {
                         }
                     } else {
                         movedItem = event.getCurrentItem().clone();
-                        int newAmount = movedItem.getAmount() + (event.getCursor() != null ? event.getCursor().getAmount() : 0);
+                        int newAmount = movedItem.getAmount() + (event.getCursor() != null
+                            ? event.getCursor().getAmount()
+                            : 0);
                         if (newAmount < movedItem.getMaxStackSize()) {
                             movedItem.setAmount(newAmount);
                         } else {
@@ -249,8 +255,8 @@ public class GuiStorageElement extends GuiElement {
                     }
                     break;
                 case COLLECT_TO_CURSOR:
-                    if (event.getCursor() == null
-                            || event.getCurrentItem() != null && event.getCurrentItem().getType() != Material.AIR) {
+                    if (event.getCursor() == null || event.getCurrentItem() != null
+                        && event.getCurrentItem().getType() != Material.AIR) {
                         return true;
                     }
                     if (!validateItemTake(click.getSlot(), slotItem)) {
@@ -259,7 +265,10 @@ public class GuiStorageElement extends GuiElement {
                     gui.simulateCollectToCursor(click);
                     return false;
                 default:
-                    click.getRawEvent().getWhoClicked().sendMessage(ChatColor.RED + "The action " + event.getAction() + " is not supported! Sorry about that :(");
+                    click.getRawEvent()
+                        .getWhoClicked()
+                        .sendMessage(ChatColor.RED + "The action " + event.getAction()
+                        + " is not supported! Sorry about that :(");
                     return true;
             }
             return !setStorageItem(click.getWhoClicked(), click.getSlot(), movedItem);
@@ -473,9 +482,10 @@ public class GuiStorageElement extends GuiElement {
     }
 
     public static class ValidatorInfo {
+
         private final GuiElement element;
-        private final int slot;
-        private final ItemStack item;
+        private final int        slot;
+        private final ItemStack  item;
 
         public ValidatorInfo(GuiElement element, int slot, ItemStack item) {
             this.item = item;
@@ -496,4 +506,3 @@ public class GuiStorageElement extends GuiElement {
         }
     }
 }
-

@@ -10,8 +10,8 @@ import java.util.List;
 public final class FreshLibConfig implements Config {
 
     @Comment("Automatically upgrade configuration files on startup or reload if any values are missing.\n"
-            + "When enabled, missing configuration options will be added with their default values\n"
-            + "and the configuration file will be updated with new options and comments.")
+        + "When enabled, missing configuration options will be added with their default values\n"
+        + "and the configuration file will be updated with new options and comments.")
     @Order(0)
     public boolean automaticConfigurationUpgrade = true;
 
@@ -25,13 +25,12 @@ public final class FreshLibConfig implements Config {
 
     @Override
     public String getHeader() {
-        return "FreshLib Configuration\n" +
-                "Plugin: FreshLib\n" +
-                "Generated with all available options documented.\n";
+        return "FreshLib Configuration\n" + "Plugin: FreshLib\n" + "Generated with all available options documented.\n";
     }
 
     @ConfigSerializable
     public static class Settings {
+
         @Order(1)
         @Comment("Language file to load from the locale/ folder (e.g., 'lang-en.yml').")
         public String languageFile = "lang-en.yml";
@@ -42,6 +41,7 @@ public final class FreshLibConfig implements Config {
 
     @ConfigSerializable
     public static class Commands {
+
         @Order(1)
         @Comment("Primary command name used to invoke the plugin (e.g., /freshlib).")
         public String mainCommandLabel = "freshlib";

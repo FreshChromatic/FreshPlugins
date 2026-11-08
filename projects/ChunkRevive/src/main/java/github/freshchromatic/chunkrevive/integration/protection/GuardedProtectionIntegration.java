@@ -1,5 +1,6 @@
 package github.freshchromatic.chunkrevive.integration.protection;
 
+import github.freshchromatic.chunkrevive.nms.ChunkCoordinate;
 import github.freshchromatic.chunkrevive.api.integration.IntegrationApi;
 import github.freshchromatic.chunkrevive.api.integration.ProtectionBatchResult;
 import github.freshchromatic.chunkrevive.api.integration.ProtectionProvider;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.CompletionStage;
 
 final class GuardedProtectionIntegration implements ProtectionIntegration, LandProtection, ProtectionProvider {
+
     private final Plugin                owner;
     private final ProtectionIntegration delegate;
     private final ProtectionProvider    provider;
@@ -45,8 +47,8 @@ final class GuardedProtectionIntegration implements ProtectionIntegration, LandP
     }
 
     @Override
-    public List<int[]> resolveEffectiveChunks(String world, int minX, int maxX, int minZ, int maxZ,
-                                              PluginConfig.Structure.PartialClaimPolicy policy) {
+    public List<ChunkCoordinate> resolveEffectiveChunks(String world, int minX, int maxX, int minZ, int maxZ,
+        PluginConfig.Structure.PartialClaimPolicy policy) {
         requireAvailable();
         return delegate.landProtection().resolveEffectiveChunks(world, minX, maxX, minZ, maxZ, policy);
     }

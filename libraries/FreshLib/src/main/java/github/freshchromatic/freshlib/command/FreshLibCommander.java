@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 
 @SuppressWarnings("UnstableApiUsage")
 public class FreshLibCommander implements Commander, ForwardingAudience.Single {
+
     private final CommandSourceStack stack;
 
     private FreshLibCommander(final CommandSourceStack stack) {
@@ -34,14 +35,15 @@ public class FreshLibCommander implements Commander, ForwardingAudience.Single {
         return this.stack.getSender();
     }
 
-    public static github.freshchromatic.freshlib.command.FreshLibCommander from(final CommandSourceStack stack) {
+    public static FreshLibCommander from(final CommandSourceStack stack) {
         if (stack.getSender() instanceof Player) {
-            return new github.freshchromatic.freshlib.command.FreshLibCommander.PlayerSender(stack);
+            return new FreshLibCommander.PlayerSender(stack);
         }
-        return new github.freshchromatic.freshlib.command.FreshLibCommander(stack);
+        return new FreshLibCommander(stack);
     }
 
-    public static final class PlayerSender extends github.freshchromatic.freshlib.command.FreshLibCommander implements PlayerCommander {
+    public static final class PlayerSender extends FreshLibCommander implements PlayerCommander {
+
         private PlayerSender(final CommandSourceStack stack) {
             super(stack);
         }

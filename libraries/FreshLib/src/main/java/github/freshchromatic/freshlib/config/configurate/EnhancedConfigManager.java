@@ -12,27 +12,22 @@ import org.spongepowered.configurate.ConfigurateException;
 import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.ConfigurationOptions;
 import org.spongepowered.configurate.loader.AbstractConfigurationLoader;
-import org.spongepowered.configurate.objectmapping.ConfigSerializable;
 import org.spongepowered.configurate.objectmapping.ObjectMapper;
 import org.spongepowered.configurate.serialize.TypeSerializerCollection;
 import org.spongepowered.configurate.yaml.NodeStyle;
 import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Enhanced abstract configuration manager with full DiscordSRV feature parity.
@@ -56,15 +51,16 @@ import java.util.regex.Pattern;
 public abstract class EnhancedConfigManager<T extends Config, LT extends AbstractConfigurationLoader<? extends CommentedConfigurationNode>> {
 
     protected static final ThreadLocal<Boolean> DEFAULT_CONFIG = ThreadLocal.withInitial(() -> false);
-    protected static final ThreadLocal<Boolean> SAVE_OR_LOAD = ThreadLocal.withInitial(() -> false);
+    protected static final ThreadLocal<Boolean> SAVE_OR_LOAD   = ThreadLocal.withInitial(() -> false);
 
-    private final Path path;
-    private final Class<T> configClass;
-    private final TypeToken<T> typeToken;
-    private T config;
-    private LT loader;
-    private ConfigCache<T> cache;
-    private final AtomicBoolean initialized = new AtomicBoolean(false);
+    private final Path                        path;
+    private final Class<T>                    configClass;
+    private final TypeToken<T>                typeToken;
+    private T                                 config;
+    private LT                                loader;
+    private ConfigCache<T>                    cache;
+    private final ConfigMissingOptionDetector missingOptionDetector = new ConfigMissingOptionDetector();
+    private final AtomicBoolean               initialized           = new AtomicBoolean(false);
 
     public EnhancedConfigManager(Path path, Class<T> configClass) {
         this.path = path;
@@ -113,27 +109,25 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
      */
     protected ConfigurationOptions options() {
         return ConfigurationOptions.defaults()
-                .header(resolveHeader())
-                .serializers(builder -> builder
-                        .registerAnnotatedObjects(objectMapperFactory())
-                        .registerAll(TypeSerializerCollection.defaults())
-                        .registerAll(customSerializers())
-                );
+            .header(resolveHeader())
+            .serializers(
+            builder ->
+                builder.registerAnnotatedObjects(objectMapperFactory())
+                    .registerAll(TypeSerializerCollection.defaults())
+                    .registerAll(customSerializers()));
     }
 
     /**
      * Resolves the header from the config class's getHeader() method.
      */
     protected String resolveHeader() {
-        try {
-            T instance = createInstance();
-            if (instance != null) {
-                String header = instance.getHeader();
-                if (header != null) {
-                    return replaceConstants(header, instance.getClass());
-                }
+        T instance = createInstance();
+        if (instance != null) {
+            String header = instance.getHeader();
+            if (header != null) {
+                return replaceConstants(header, instance.getClass());
             }
-        } catch (Exception ignored) {}
+        }
         return header();
     }
 
@@ -154,10 +148,10 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
     @SuppressWarnings("unchecked")
     protected LT createLoader() {
         return (LT) YamlConfigurationLoader.builder()
-                .path(path)
-                .nodeStyle(NodeStyle.BLOCK)
-                .defaultOptions(options())
-                .build();
+            .path(path)
+            .nodeStyle(NodeStyle.BLOCK)
+            .defaultOptions(options())
+            .build();
     }
 
     /**
@@ -168,6 +162,10 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
      * @param backupPath if not null, create backup before modifications
      */
     public void load(boolean forceSave, boolean detectMissingOptions, Path backupPath) {
+        tryLoad(forceSave, detectMissingOptions, backupPath);
+    }
+
+    public boolean tryLoad(boolean forceSave, boolean detectMissingOptions, Path backupPath) {
         SAVE_OR_LOAD.set(true);
         try {
             if (loader == null) {
@@ -188,7 +186,11 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
                 } finally {
                     DEFAULT_CONFIG.set(false);
                 }
-                return;
+                initialized.set(true);
+                if (cache != null) {
+                    cache.set(config);
+                }
+                return true;
             }
 
             node = loader.load();
@@ -203,7 +205,7 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
                 DEFAULT_CONFIG.set(false);
             }
 
-            List<String> missingKeys = findMissingKeys(defaultNode, node, "", configClass);
+            List<ConfigNodePath> missingKeys = missingOptionDetector.find(defaultNode, node, configClass);
             boolean hasMissingOptions = !missingKeys.isEmpty();
 
             if (detectMissingOptions && hasMissingOptions) {
@@ -222,19 +224,27 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
 
                 // Only add missing options to the current node instead of merging defaults over everything.
                 // This prevents adding back intentional removals from maps.
-                for (String key : missingKeys) {
-                    node.node((Object[]) key.split("\\.")).set(defaultNode.node((Object[]) key.split("\\.")));
+                for (ConfigNodePath key : missingKeys) {
+                    key.copyDefaultTo(node, defaultNode);
                 }
 
-                config = Objects.requireNonNull(node.get(typeToken));
-                save();
+                T loaded = Objects.requireNonNull(node.get(typeToken));
+                saveCurrent(loaded);
+                config = loaded;
+                if (cache != null) {
+                    cache.set(config);
+                }
 
                 Logging.logger().info("Configuration upgrade completed successfully for: " + path.getFileName());
             } else {
-                config = Objects.requireNonNull(node.get(typeToken));
+                T loaded = Objects.requireNonNull(node.get(typeToken));
 
-                if (forceSave || (hasMissingOptions && shouldAutoUpgrade)) {
-                    save();
+                if (forceSave) {
+                    saveCurrent(loaded);
+                }
+                config = loaded;
+                if (cache != null) {
+                    cache.set(config);
                 }
             }
 
@@ -254,9 +264,10 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
 
             initialized.set(true);
 
+            return true;
         } catch (ConfigurateException e) {
-            Logging.logger().severe("Failed to load configuration " + path.getFileName() + ": " + e.getMessage());
-            e.printStackTrace();
+            Logging.logger().severe("Failed to load configuration " + path.getFileName(), e);
+            return false;
         } finally {
             SAVE_OR_LOAD.set(false);
         }
@@ -292,12 +303,15 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
      *
      * @param missingKeys list of missing configuration keys
      */
-    private void logMissingOptions(List<String> missingKeys) {
-        if (missingKeys.isEmpty()) return;
+    private void logMissingOptions(List<ConfigNodePath> missingKeys) {
+        if (missingKeys.isEmpty()) {
+            return;
+        }
 
-        Logging.logger().warning("Detected " + missingKeys.size() + " missing option(s) in " + path.getFileName() + ":");
+        Logging.logger().warning("Detected " + missingKeys.size() + " missing option(s) in " + path.getFileName()
+            + ":");
 
-        for (String key : missingKeys) {
+        for (ConfigNodePath key : missingKeys) {
             Logging.logger().warning("  - Missing option: \"" + key + "\"");
         }
 
@@ -309,7 +323,6 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
     }
 
     public void reload() {
-        invalidateCache();
         load();
     }
 
@@ -317,19 +330,28 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
      * Saves current configuration to disk with comment processing.
      */
     public void save() {
+        save(config);
+        if (cache != null) {
+            cache.set(config);
+        }
+    }
+
+    private void save(T value) {
         SAVE_OR_LOAD.set(true);
         try {
-            CommentedConfigurationNode node = loader.createNode(options());
-            node.set(typeToken, config);
-            saveWithComments(node);
-            if (cache != null) {
-                cache.set(config);
-            }
+            saveCurrent(value);
+            config = value;
         } catch (ConfigurateException e) {
-            Logging.logger().severe("Failed to save configuration " + path.getFileName() + ": " + e.getMessage());
+            throw new IllegalStateException("Failed to save configuration " + path.getFileName(), e);
         } finally {
             SAVE_OR_LOAD.set(false);
         }
+    }
+
+    private void saveCurrent(T value) throws ConfigurateException {
+        CommentedConfigurationNode node = loader.createNode(options());
+        node.set(typeToken, value);
+        saveWithComments(node);
     }
 
     /**
@@ -353,79 +375,16 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
         return result;
     }
 
-    protected void validateSpecificFields(ValidationResult result) {}
-
-    private List<String> findMissingKeys(ConfigurationNode defaults, ConfigurationNode loaded, String prefix, Class<?> clazz) {
-        List<String> missing = new ArrayList<>();
-        if (clazz == null) return missing;
-
-        Map<String, Field> fieldsByDashedName = getFieldsByDashedName(clazz);
-
-        for (Map.Entry<Object, ? extends ConfigurationNode> entry : defaults.childrenMap().entrySet()) {
-            String nodeKey = entry.getKey().toString();
-            String fullPath = prefix.isEmpty() ? nodeKey : prefix + "." + nodeKey;
-
-            Field field = fieldsByDashedName.get(nodeKey);
-            
-            // If this node does not correspond to a field, it's a Map entry.
-            // Map entries are not "missing options".
-            if (field == null) continue;
-
-            ConfigurationNode loadedChild = loaded.node(nodeKey);
-            if (loadedChild.virtual()) {
-                missing.add(fullPath);
-            } else if (entry.getValue().isMap()) {
-                // Determine if we should recurse. We recurse into @ConfigSerializable objects.
-                Class<?> fieldType = field.getType();
-                if (fieldType.isAnnotationPresent(ConfigSerializable.class)) {
-                    missing.addAll(findMissingKeys(entry.getValue(), loadedChild, fullPath, fieldType));
-                } else if (Map.class.isAssignableFrom(fieldType)) {
-                    // It's a Map field. We don't report missing keys, but we can recurse into existing ones 
-                    // if they are ConfigSerializable objects.
-                    Type genericType = field.getGenericType();
-                    if (genericType instanceof ParameterizedType) {
-                        Type valueType = ((ParameterizedType) genericType).getActualTypeArguments()[1];
-                        if (valueType instanceof Class && ((Class<?>) valueType).isAnnotationPresent(ConfigSerializable.class)) {
-                            Class<?> valueClass = (Class<?>) valueType;
-                            for (Map.Entry<Object, ? extends ConfigurationNode> mapEntry : entry.getValue().childrenMap().entrySet()) {
-                                ConfigurationNode loadedMapEntry = loadedChild.node(mapEntry.getKey());
-                                if (!loadedMapEntry.virtual()) {
-                                    missing.addAll(findMissingKeys(mapEntry.getValue(), loadedMapEntry, fullPath + "." + mapEntry.getKey(), valueClass));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return missing;
-    }
-
-    private Map<String, Field> getFieldsByDashedName(Class<?> clazz) {
-        Map<String, Field> map = new HashMap<>();
-        Class<?> current = clazz;
-        while (current != null && current != Object.class) {
-            for (Field field : current.getDeclaredFields()) {
-                int modifiers = field.getModifiers();
-                if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers)) continue;
-                String dashedName = ObjectMapperFactoryProvider.getNamingScheme().coerce(field.getName());
-                map.putIfAbsent(dashedName, field);
-            }
-            current = current.getSuperclass();
-        }
-        return map;
-    }
-
-    private boolean hasNewDefaults(CommentedConfigurationNode defaultNode, ConfigurationNode loadedNode) {
-        return !findMissingKeys(defaultNode, loadedNode, "", configClass).isEmpty();
+    protected void validateSpecificFields(ValidationResult result) {
     }
 
     /**
      * Creates a backup of the current configuration file.
      */
     protected void createBackup(Path backupPath) {
-        if (!Files.exists(path)) return;
+        if (!Files.exists(path)) {
+            return;
+        }
 
         try {
             if (backupPath.getParent() != null) {
@@ -447,91 +406,7 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
             return;
         }
 
-        CommentedConfigurationNode commentedNode = (CommentedConfigurationNode) node;
-
-        StringWriter sw = new StringWriter();
-        YamlConfigurationLoader tempLoader = YamlConfigurationLoader.builder()
-                .sink(() -> new BufferedWriter(sw))
-                .nodeStyle(NodeStyle.BLOCK)
-                .defaultOptions(node.options())
-                .build();
-        tempLoader.save(node);
-
-        Map<String, String> commentMap = new LinkedHashMap<>();
-        buildCommentMap("", commentedNode, commentMap);
-
-        String yaml = sw.toString();
-        String output = commentMap.isEmpty() ? yaml : insertComments(yaml, commentMap);
-
-        try {
-            Path parent = path.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Files.writeString(path, output, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new ConfigurateException(e);
-        }
-    }
-
-    private static void buildCommentMap(String prefix, CommentedConfigurationNode node, Map<String, String> out) {
-        for (Map.Entry<Object, ? extends ConfigurationNode> entry : node.childrenMap().entrySet()) {
-            ConfigurationNode child = entry.getValue();
-            String key = entry.getKey().toString();
-            String pathStr = prefix.isEmpty() ? key : prefix + "." + key;
-
-            if (child instanceof CommentedConfigurationNode) {
-                String comment = ((CommentedConfigurationNode) child).comment();
-                if (comment != null && !comment.isEmpty()) {
-                    out.put(pathStr, comment);
-                }
-                buildCommentMap(pathStr, (CommentedConfigurationNode) child, out);
-            }
-        }
-    }
-
-    private static final Pattern KEY_LINE = Pattern.compile("^( *)([a-zA-Z0-9_-]+):(.*)$");
-
-    private static String insertComments(String yaml, Map<String, String> commentMap) {
-        StringBuilder result = new StringBuilder();
-        String[] lines = yaml.split("\n", -1);
-
-        List<String> keyStack = new ArrayList<>();
-        List<Integer> indentStack = new ArrayList<>();
-
-        for (String line : lines) {
-            String normalized = line.endsWith("\r") ? line.substring(0, line.length() - 1) : line;
-
-            Matcher m = KEY_LINE.matcher(normalized);
-            if (m.matches()) {
-                int indent = m.group(1).length();
-                String key = m.group(2);
-
-                while (!indentStack.isEmpty() && indentStack.get(indentStack.size() - 1) >= indent) {
-                    indentStack.remove(indentStack.size() - 1);
-                    keyStack.remove(keyStack.size() - 1);
-                }
-                keyStack.add(key);
-                indentStack.add(indent);
-
-                String dotPath = String.join(".", keyStack);
-                String comment = commentMap.get(dotPath);
-                if (comment != null) {
-                    String indentStr = m.group(1);
-                    for (String commentLine : comment.split("\n", -1)) {
-                        result.append(indentStr).append("# ").append(commentLine).append("\n");
-                    }
-                }
-            }
-
-            result.append(line).append("\n");
-        }
-
-        String out = result.toString();
-        if (out.endsWith("\n\n") && !yaml.endsWith("\n\n")) {
-            out = out.substring(0, out.length() - 1);
-        }
-        return out;
+        new YamlCommentWriter(path).save((CommentedConfigurationNode) node);
     }
 
     /**
@@ -539,7 +414,9 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
      */
     protected String replaceConstants(String input, Class<?> clazz) {
         Constants constantsAnnotation = clazz.getAnnotation(Constants.class);
-        if (constantsAnnotation == null) return input;
+        if (constantsAnnotation == null) {
+            return input;
+        }
 
         Map<String, String> constantMap = new HashMap<>();
         for (String def : constantsAnnotation.value()) {
@@ -570,19 +447,27 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
      * Based on DiscordSRV's nullAllFields method.
      */
     public static void nullAllFields(Object obj) {
-        if (obj == null) return;
+        if (obj == null) {
+            return;
+        }
 
         Class<?> clazz = obj.getClass();
         while (clazz != null && clazz != Object.class) {
             for (Field field : clazz.getDeclaredFields()) {
                 int modifiers = field.getModifiers();
-                if (Modifier.isStatic(modifiers) || Modifier.isFinal(modifiers)) continue;
-                if (field.getType().isPrimitive()) continue;
+                if (Modifier.isStatic(modifiers) || Modifier.isFinal(modifiers)) {
+                    continue;
+                }
+                if (field.getType().isPrimitive()) {
+                    continue;
+                }
 
                 field.setAccessible(true);
                 try {
                     field.set(obj, null);
-                } catch (IllegalAccessException ignored) {}
+                } catch (IllegalAccessException e) {
+                    throw new IllegalStateException("Unable to clear configuration field " + field, e);
+                }
             }
             clazz = clazz.getSuperclass();
         }
@@ -595,11 +480,14 @@ public abstract class EnhancedConfigManager<T extends Config, LT extends Abstrac
         if (cache == null) {
             synchronized (this) {
                 if (cache == null) {
-                    cache = new ConfigCache<T>(
-                            path,
-                            (ignored) -> load(),
-                            (ignored) -> save()
-                    );
+                    cache = new ConfigCache<T>(path, ignored -> {
+                        if (tryLoad(true, true, null)) {
+                            Logging.logger().info("Configuration reloaded: " + path.getFileName());
+                        }
+                    }, this::save);
+                    if (initialized.get()) {
+                        cache.set(config);
+                    }
                 }
             }
         }

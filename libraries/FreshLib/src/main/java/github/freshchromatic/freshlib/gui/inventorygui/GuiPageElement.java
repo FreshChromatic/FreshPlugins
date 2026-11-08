@@ -30,9 +30,10 @@ import org.bukkit.inventory.ItemStack;
  * <b>Untested und potentially unfinished.</b>
  */
 public class GuiPageElement extends StaticGuiElement {
+
     private PageAction pageAction;
-    private boolean silent = false;
-    private ItemStack inactiveItem = null;
+    private boolean    silent       = false;
+    private ItemStack  inactiveItem = null;
 
     /**
      * An element that allows for controlling the pagination of the gui.
@@ -50,11 +51,13 @@ public class GuiPageElement extends StaticGuiElement {
         setAction(click -> {
             switch (pageAction) {
                 case NEXT:
-                    if (click.getGui().getPageNumber(click.getWhoClicked()) + 1 < click.getGui().getPageAmount(click.getWhoClicked())) {
+                    if (click.getGui().getPageNumber(click.getWhoClicked()) + 1 < click.getGui().getPageAmount(
+                        click.getWhoClicked())) {
                         if (!isSilent()) {
                             click.getGui().playClickSound();
                         }
-                        click.getGui().setPageNumber(click.getWhoClicked(), click.getGui().getPageNumber(click.getWhoClicked()) + 1);
+                        click.getGui().setPageNumber(click.getWhoClicked(), click.getGui().getPageNumber(
+                            click.getWhoClicked()) + 1);
                     }
                     break;
                 case PREVIOUS:
@@ -62,7 +65,8 @@ public class GuiPageElement extends StaticGuiElement {
                         if (!isSilent()) {
                             click.getGui().playClickSound();
                         }
-                        click.getGui().setPageNumber(click.getWhoClicked(), click.getGui().getPageNumber(click.getWhoClicked()) - 1);
+                        click.getGui().setPageNumber(click.getWhoClicked(), click.getGui().getPageNumber(
+                            click.getWhoClicked()) - 1);
                     }
                     break;
                 case FIRST:
@@ -75,7 +79,8 @@ public class GuiPageElement extends StaticGuiElement {
                     if (!isSilent()) {
                         click.getGui().playClickSound();
                     }
-                    click.getGui().setPageNumber(click.getWhoClicked(), click.getGui().getPageAmount(click.getWhoClicked()) - 1);
+                    click.getGui().setPageNumber(click.getWhoClicked(), click.getGui().getPageAmount(
+                        click.getWhoClicked()) - 1);
                     break;
             }
             return true;
@@ -110,9 +115,12 @@ public class GuiPageElement extends StaticGuiElement {
     @Override
     public ItemStack getItem(HumanEntity who, int slot) {
         if (((pageAction == PageAction.FIRST || pageAction == PageAction.LAST) && gui.getPageAmount(who) < 3)
-                || (pageAction == PageAction.NEXT && gui.getPageNumber(who) + 1 >= gui.getPageAmount(who))
-                || (pageAction == PageAction.PREVIOUS && gui.getPageNumber(who) == 0)) {
-            return inactiveItem != null ? inactiveItem.clone() : (gui.getFiller() != null ? gui.getFiller().getItem(who, slot) : null);
+            || (pageAction == PageAction.NEXT && gui.getPageNumber(who) + 1 >= gui.getPageAmount(who))
+            || (pageAction == PageAction.PREVIOUS && gui.getPageNumber(who) == 0)) {
+            if (inactiveItem != null) {
+                return inactiveItem.clone();
+            }
+            return gui.getFiller() != null ? gui.getFiller().getItem(who, slot) : null;
         }
         if (pageAction == PageAction.PREVIOUS) {
             setNumber(gui.getPageNumber(who));
@@ -125,10 +133,6 @@ public class GuiPageElement extends StaticGuiElement {
     }
 
     public enum PageAction {
-        NEXT,
-        PREVIOUS,
-        FIRST,
-        LAST;
+        NEXT, PREVIOUS, FIRST, LAST;
     }
 }
-

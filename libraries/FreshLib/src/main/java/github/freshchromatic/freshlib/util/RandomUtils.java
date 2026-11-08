@@ -5,7 +5,9 @@ import java.util.concurrent.ThreadLocalRandom;
 public class RandomUtils {
 
     public static boolean random(double percentage) {
-        if (ThreadLocalRandom.current().nextDouble(0, 100) <= percentage) return true;
+        if (ThreadLocalRandom.current().nextDouble(0, 100) <= percentage) {
+            return true;
+        }
         return false;
     }
 
